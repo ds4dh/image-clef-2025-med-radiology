@@ -106,13 +106,22 @@ class TrainingSession(TrainingBaseSession):
         return self.init_network_functional(self.config_network)
 
     def init_metrics(self) -> List[BaseMetricsClass] | None:
-        pass
+        return
 
     def forward_pass(self, mini_batch: Dict[str, Any | torch.Tensor]) -> Dict[str, Any | torch.Tensor]:
-        pass
+        image_tensor = mini_batch["image_tensor"].to(self.device)
+        target_seq = mini_batch["cui_seq"].to(self.device)
 
-    def loss_function(self, **kwargs: Any) -> torch.Tensor:
-        pass
+        prediction_seq = self.network(image_tensor, target_seq)
+
+        return {"target_seq": target_seq, "prediction_seq": prediction_seq}
+
+    def loss_function(self, *, prediction_seq: torch.Tensor, target_seq: torch.Tensor) -> torch.Tensor:
+        criterion = torch.nn.CrossEntropyLoss()
+
+        loss = criterion(prediction_seq.transpose(-2, -1), target_seq)
+
+        return loss
 
 
 
