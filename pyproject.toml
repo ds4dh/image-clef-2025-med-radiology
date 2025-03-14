@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "radiclef"
+version = "0.1.0"
+description = "Radiology report generation"
+requires-python = ">=3.10, <=3.12.3"
+
+dependencies = [
+    "torch",
+    "torchbase",
+    "numpy",
+    "pillow",
+    "scikit-learn",
+    "tensorboard",
+    "torchinfo",
+    "medcat"
+]
+
+
+[tool.setuptools.packages.find]
+include = ["radiclef*"]
