@@ -67,7 +67,9 @@ class TrainingSession(TrainingBaseSession):
             cui_alphabet = [v.strip() for v in f.readlines()]
 
         cui_obj = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
-        image_prep = ImagePrepare(standard_image_size=(1024, 1024), standard_image_mode="L")
+        image_prep = ImagePrepare(standard_image_size=(1024, 1024),
+                                  standard_image_mode=config_data["image_mode"],
+                                  concatenate_positional_embedding=config_data["image_positional_embedding"])
 
         def map_fields(example):
             if len(example["image"]) == 1:
@@ -106,6 +108,7 @@ class TrainingSession(TrainingBaseSession):
         return self.init_network_functional(self.config_network)
 
     def init_metrics(self) -> List[BaseMetricsClass] | None:
+        # TODO: Add metrics from official challenge repo
         return
 
     def forward_pass(self, mini_batch: Dict[str, Any | torch.Tensor]) -> Dict[str, Any | torch.Tensor]:
@@ -124,7 +127,62 @@ class TrainingSession(TrainingBaseSession):
         return loss
 
 
+if __name__ == "__main__":
+    with open(CUI_ALPHABET_PATH, "r") as f:
+        vocab_size = len([line for line in f.readlines()])
 
+    config = {
+        "session": {
+            "device_name": "cuda:0",
+            "num_epochs": 500,
+            "mini_batch_size": 128,
+            "learning_rate": 0.003,
+            "weight_decay": 0.0,
+            "dataloader_num_workers": 0,
+            "tag_postfix": None
+        },
+        "data": {
+            "download_only_num_elements_of_dataset": None,
+            "image_positional_embedding": True,
+            "image_mode": "L"
+        },
+        "metrics": {
 
+        },
+        "network":
+            {
+                "architecture": "ConvEmbeddingToSec",
+                "convolutional_embedding": {
+                    "sampling_ratio_list": [
+                        2,
+                        2,
+                        2,
+                        2,
+                        4
+                    ],
+                    "channels_list": [
+                        3,
+                        8,
+                        16,
+                        16,
+                        16,
+                        16
+                    ],
+                    "num_out_channels": 1,
+                    "dropout": 0.1
+                },
+                "sequence_generator": {
+                    "input_dim": 256,
+                    "hidden_dim": 64,
+                    "vocab_size": vocab_size,
+                    "max_len": 8,
+                    "num_layers": 4,
+                    "num_heads": 2
 
+                }
+            }
 
+    }
+
+    session = TrainingSession(config)
+    session()

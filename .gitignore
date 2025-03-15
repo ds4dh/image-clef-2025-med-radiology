@@ -10,3 +10,4 @@ __pycache__
 /build/
 /resources/
 /radiclef.egg-info/
+/radiclef/experiments/conv_to_cui_seq/runs/
