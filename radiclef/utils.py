@@ -63,15 +63,20 @@ class ConceptUniqueIdentifiers:
 
 
 class ImagePrepare:
-    def __init__(self, standard_image_size: Tuple[int, int], standard_image_mode: str = "RGB"):
+    def __init__(self, standard_image_size: Tuple[int, int],
+                 standard_image_mode: str = "RGB",
+                 concatenate_positional_embedding: bool = True):
         if not isinstance(standard_image_size, tuple) or len(standard_image_size) != 2:
             raise TypeError("The target standard image size should be a tuple of length 2.")
         self.image_size = standard_image_size
 
         if not isinstance(standard_image_mode, str) or standard_image_mode not in ["RGB", "L"]:
             raise TypeError("The target standard image mode should be either of `RGB` or `L`.")
-
         self.image_mode = standard_image_mode
+
+        if not isinstance(concatenate_positional_embedding, bool):
+            raise TypeError("Indicate whether or not you want positional embedding to be concatenated to the image.")
+        self.concatenate_positional_embedding = concatenate_positional_embedding
 
     @staticmethod
     def normalize(image: torch.Tensor) -> torch.Tensor:
@@ -128,7 +133,9 @@ class ImagePrepare:
             image = image.convert(self.image_mode)
 
         image = to_tensor(image)  # values in [0, 1]
-        image = self.concatenate_with_coord_grid(image)
+        if self.concatenate_positional_embedding:
+            image = self.concatenate_with_coord_grid(image)
+
         image = self.adjust_to_standard_size(image)
 
         return image
