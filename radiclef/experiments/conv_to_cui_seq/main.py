@@ -99,6 +99,7 @@ class TrainingSession(TrainingBaseSession):
 if __name__ == "__main__":
     download_only_num_elements_of_dataset: None | int
     import socket
+
     if socket.gethostname().lower() == "sf-macbook-pro.local":
         download_only_num_elements_of_dataset = 400
     else:
@@ -125,7 +126,13 @@ if __name__ == "__main__":
                                     cache_dir=ROCO_DATABASE_DOWNLOAD_PATH)
 
     if not os.path.exists(CUI_ALPHABET_PATH):
-        dataset = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)["train"]
+        if download_only_num_elements_of_dataset is None:
+            dataset = load_dataset("eltorio/ROCOv2-radiology",
+                                   streaming=False,
+                                   cache_dir=ROCO_DATABASE_DOWNLOAD_PATH, split="train")
+
+        else:
+            dataset = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)["train"]
 
         dataset = dataset.remove_columns([col for col in dataset.features if col != "cui"])
         cui_obj = ConceptUniqueIdentifiers()
@@ -155,7 +162,6 @@ if __name__ == "__main__":
             "tag_postfix": None
         },
         "data": {
-            "download_only_num_elements_of_dataset": None,
             "image_positional_embedding": True,
             "image_mode": "L"
         },
