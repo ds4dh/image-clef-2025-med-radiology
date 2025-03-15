@@ -137,9 +137,12 @@ if __name__ == "__main__":
         dataset = dataset.remove_columns([col for col in dataset.features if col != "cui"])
         cui_obj = ConceptUniqueIdentifiers()
 
+        print("Generating the CUI alphabet for the first time ..")
         batch_size = 100
         for start_idx in range(0, len(dataset), batch_size):
             end_idx = min(start_idx + batch_size, len(dataset))
+            print("Analyzing range [{}, {}) from database of length {}".format(
+                start_idx, end_idx, len(dataset)))
 
             items = [cui for item in dataset.select(range(start_idx, end_idx))["cui"] for cui in item]
             cui_obj.integrate_items_into_alphabet(items)
@@ -155,7 +158,7 @@ if __name__ == "__main__":
         "session": {
             "device_name": "cuda:0",
             "num_epochs": 500,
-            "mini_batch_size": 128,
+            "mini_batch_size": 64,
             "learning_rate": 0.003,
             "weight_decay": 0.0,
             "dataloader_num_workers": 0,
