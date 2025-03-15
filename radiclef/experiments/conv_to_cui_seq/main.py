@@ -24,44 +24,13 @@ class TrainingSession(TrainingBaseSession):
     @staticmethod
     def init_datasets_functional(config_data: Dict) -> Tuple[Dataset, ValidationDatasetsDict]:
 
-        download_only_num_elements_of_dataset: None | int = config_data["download_only_num_elements_of_dataset"]
-
-        if download_only_num_elements_of_dataset is not None:
-            if not os.path.exists(ROCO_DATABASE_DOWNLOAD_PATH):
-                cache_dir = tempfile.TemporaryDirectory()
-                dataset_dict = load_dataset("eltorio/ROCOv2-radiology",
-                                            streaming=True,
-                                            cache_dir=cache_dir.name)
-
-                dataset_dict = DatasetDict(
-                    {split: Dataset.from_list(list(dataset_split.take(download_only_num_elements_of_dataset)))
-                     for split, dataset_split in dataset_dict.items()
-                     })
-                dataset_dict.save_to_disk(ROCO_DATABASE_DOWNLOAD_PATH)
-                cache_dir.cleanup()
+        if os.path.exists(os.path.join(ROCO_DATABASE_DOWNLOAD_PATH, "dataset_dict.json")):
             dataset_dict = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)
 
         else:
             dataset_dict = load_dataset("eltorio/ROCOv2-radiology",
                                         streaming=False,
                                         cache_dir=ROCO_DATABASE_DOWNLOAD_PATH)
-
-        if not os.path.exists(CUI_ALPHABET_PATH):
-            dataset = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)["train"]
-
-            dataset = dataset.remove_columns([col for col in dataset.features if col != "cui"])
-            cui_obj = ConceptUniqueIdentifiers()
-
-            batch_size = 100
-            for start_idx in range(0, len(dataset), batch_size):
-                end_idx = min(start_idx + batch_size, len(dataset))
-
-                items = [cui for item in dataset.select(range(start_idx, end_idx))["cui"] for cui in item]
-                cui_obj.integrate_items_into_alphabet(items)
-
-            with open(CUI_ALPHABET_PATH, "w") as f:
-                for vocab in cui_obj.alphabet:
-                    f.write(vocab + "\n")
 
         with open(CUI_ALPHABET_PATH, "r") as f:
             cui_alphabet = [v.strip() for v in f.readlines()]
@@ -128,6 +97,50 @@ class TrainingSession(TrainingBaseSession):
 
 
 if __name__ == "__main__":
+    download_only_num_elements_of_dataset: None | int
+    import socket
+    if socket.gethostname().lower() == "sf-macbook-pro.local":
+        download_only_num_elements_of_dataset = 400
+    else:
+        download_only_num_elements_of_dataset = None
+
+    if download_only_num_elements_of_dataset is not None:
+        if not os.path.exists(ROCO_DATABASE_DOWNLOAD_PATH):
+            cache_dir = tempfile.TemporaryDirectory()
+            dataset_dict = load_dataset("eltorio/ROCOv2-radiology",
+                                        streaming=True,
+                                        cache_dir=cache_dir.name)
+
+            dataset_dict = DatasetDict(
+                {split: Dataset.from_list(list(dataset_split.take(download_only_num_elements_of_dataset)))
+                 for split, dataset_split in dataset_dict.items()
+                 })
+            dataset_dict.save_to_disk(ROCO_DATABASE_DOWNLOAD_PATH)
+            cache_dir.cleanup()
+        dataset_dict = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)
+
+    else:
+        dataset_dict = load_dataset("eltorio/ROCOv2-radiology",
+                                    streaming=False,
+                                    cache_dir=ROCO_DATABASE_DOWNLOAD_PATH)
+
+    if not os.path.exists(CUI_ALPHABET_PATH):
+        dataset = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)["train"]
+
+        dataset = dataset.remove_columns([col for col in dataset.features if col != "cui"])
+        cui_obj = ConceptUniqueIdentifiers()
+
+        batch_size = 100
+        for start_idx in range(0, len(dataset), batch_size):
+            end_idx = min(start_idx + batch_size, len(dataset))
+
+            items = [cui for item in dataset.select(range(start_idx, end_idx))["cui"] for cui in item]
+            cui_obj.integrate_items_into_alphabet(items)
+
+        with open(CUI_ALPHABET_PATH, "w") as f:
+            for vocab in cui_obj.alphabet:
+                f.write(vocab + "\n")
+
     with open(CUI_ALPHABET_PATH, "r") as f:
         vocab_size = len([line for line in f.readlines()])
 
