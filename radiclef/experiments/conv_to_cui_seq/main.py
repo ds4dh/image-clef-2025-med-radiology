@@ -1,4 +1,4 @@
-from radiclef import RESOURCES_DIR, ROCO_DATABASE_DOWNLOAD_PATH
+from radiclef import RESOURCES_DIR, ROCO_DATABASE_PATH
 from radiclef.utils import ConceptUniqueIdentifiers, ImagePrepare
 from radiclef.networks import ConvEmbeddingToSec
 
@@ -12,7 +12,6 @@ from torchbase.utils import BaseMetricsClass, ValidationDatasetsDict
 from typing import Any, Dict, List, Tuple
 
 import os
-import tempfile
 
 CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
 
@@ -24,18 +23,12 @@ class TrainingSession(TrainingBaseSession):
     @staticmethod
     def init_datasets_functional(config_data: Dict) -> Tuple[Dataset, ValidationDatasetsDict]:
 
-        if os.path.exists(os.path.join(ROCO_DATABASE_DOWNLOAD_PATH, "dataset_dict.json")):
-            dataset_dict = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)
-
-        else:
-            dataset_dict = load_dataset("eltorio/ROCOv2-radiology",
-                                        streaming=False,
-                                        cache_dir=ROCO_DATABASE_DOWNLOAD_PATH)
+        dataset_dict = load_from_disk(ROCO_DATABASE_PATH)
 
         with open(CUI_ALPHABET_PATH, "r") as f:
             cui_alphabet = [v.strip() for v in f.readlines()]
 
-        cui_obj = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
+        cui_object = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
         image_prep = ImagePrepare(standard_image_size=(1024, 1024),
                                   standard_image_mode=config_data["image_mode"],
                                   concatenate_positional_embedding=config_data["image_positional_embedding"])
@@ -43,11 +36,11 @@ class TrainingSession(TrainingBaseSession):
         def map_fields(example):
             if len(example["image"]) == 1:
                 image_tensor = image_prep(example["image"][0])
-                cui_seq = torch.tensor(cui_obj.encode_as_seq(example["cui"][0]))
+                cui_seq = torch.tensor(cui_object.encode_as_seq(example["cui_codes"][0]))
             else:
                 image_tensor = torch.cat([image_prep(_img).unsqueeze(0) for _img in example["image"]], dim=0)
-                cui_seq = pad_sequence([torch.tensor(cui_obj.encode_as_seq(_c)) for _c in example["cui"]],
-                                       batch_first=True, padding_value=cui_obj.c2i[cui_obj.PAD_TOKEN])
+                cui_seq = pad_sequence([torch.tensor(cui_object.encode_as_seq(_c)) for _c in example["cui_codes"]],
+                                       batch_first=True, padding_value=cui_object.c2i[cui_object.PAD_TOKEN])
             # TODO: Add some basic image augmentation
 
             return {
@@ -58,7 +51,7 @@ class TrainingSession(TrainingBaseSession):
         dataset_train = dataset_dict["train"]
         dataset_train.set_transform(lambda x: map_fields(x))
 
-        dataset_valid = dataset_dict["validation"]
+        dataset_valid = dataset_dict["valid"]
         dataset_valid.set_transform(lambda x: map_fields(x))
 
         return dataset_train, ValidationDatasetsDict(
@@ -97,44 +90,11 @@ class TrainingSession(TrainingBaseSession):
 
 
 if __name__ == "__main__":
-    download_only_num_elements_of_dataset: None | int
-    import socket
-
-    if socket.gethostname().lower() == "sf-macbook-pro.local":
-        download_only_num_elements_of_dataset = 400
-    else:
-        download_only_num_elements_of_dataset = None
-
-    if download_only_num_elements_of_dataset is not None:
-        if not os.path.exists(ROCO_DATABASE_DOWNLOAD_PATH):
-            cache_dir = tempfile.TemporaryDirectory()
-            dataset_dict = load_dataset("eltorio/ROCOv2-radiology",
-                                        streaming=True,
-                                        cache_dir=cache_dir.name)
-
-            dataset_dict = DatasetDict(
-                {split: Dataset.from_list(list(dataset_split.take(download_only_num_elements_of_dataset)))
-                 for split, dataset_split in dataset_dict.items()
-                 })
-            dataset_dict.save_to_disk(ROCO_DATABASE_DOWNLOAD_PATH)
-            cache_dir.cleanup()
-        dataset_dict = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)
-
-    else:
-        dataset_dict = load_dataset("eltorio/ROCOv2-radiology",
-                                    streaming=False,
-                                    cache_dir=ROCO_DATABASE_DOWNLOAD_PATH)
 
     if not os.path.exists(CUI_ALPHABET_PATH):
-        if download_only_num_elements_of_dataset is None:
-            dataset = load_dataset("eltorio/ROCOv2-radiology",
-                                   streaming=False,
-                                   cache_dir=ROCO_DATABASE_DOWNLOAD_PATH, split="train")
 
-        else:
-            dataset = load_from_disk(ROCO_DATABASE_DOWNLOAD_PATH)["train"]
-
-        dataset = dataset.remove_columns([col for col in dataset.features if col != "cui"])
+        dataset = load_from_disk(ROCO_DATABASE_PATH)["train"]
+        dataset = dataset.remove_columns([col for col in dataset.features if col != "cui_codes"])
         cui_obj = ConceptUniqueIdentifiers()
 
         print("Generating the CUI alphabet for the first time ..")
@@ -144,7 +104,7 @@ if __name__ == "__main__":
             print("Analyzing range [{}, {}) from database of length {}".format(
                 start_idx, end_idx, len(dataset)))
 
-            items = [cui for item in dataset.select(range(start_idx, end_idx))["cui"] for cui in item]
+            items = [cui for item in dataset.select(range(start_idx, end_idx))["cui_codes"] for cui in item]
             cui_obj.integrate_items_into_alphabet(items)
 
         with open(CUI_ALPHABET_PATH, "w") as f:
@@ -158,7 +118,7 @@ if __name__ == "__main__":
         "session": {
             "device_name": "cuda:0",
             "num_epochs": 500,
-            "mini_batch_size": 64,
+            "mini_batch_size": 46,
             "learning_rate": 0.003,
             "weight_decay": 0.0,
             "dataloader_num_workers": 0,
