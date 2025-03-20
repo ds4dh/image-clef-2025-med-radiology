@@ -17,6 +17,6 @@ if hostname in datasets_root_dirs_dict.keys():
 else:
     raise ValueError("The root data directory not assigned for the hostname.")
 
-ROCO_DATABASE_DOWNLOAD_PATH = os.path.join(CORPORA_DIR, "ROCOv2-radiology")
+ROCO_DATABASE_PATH = os.path.join(CORPORA_DIR, "ROCOv2-radiology")
 
 RESOURCES_DIR = os.path.join(REPO_DIR, "resources")
