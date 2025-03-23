@@ -17,6 +17,21 @@ CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
 
 
 class TrainingSession(TrainingBaseSession):
+    def __init__(self, config: Dict,
+                 cui_object: ConceptUniqueIdentifiers,
+                 runs_parent_dir: str | None = None,
+                 create_run_dir_afresh: bool = True,
+                 source_run_dir_tag: str | None = None,
+                 tag_postfix: str | None = None):
+
+        self.cui_object = cui_object
+        super().__init__(config,
+                         runs_parent_dir=runs_parent_dir,
+                         create_run_dir_afresh=create_run_dir_afresh,
+                         source_run_dir_tag=source_run_dir_tag,
+                         tag_postfix=tag_postfix
+                         )
+
     def init_datasets(self) -> Tuple[Dataset, ValidationDatasetsDict]:
         return self.init_datasets_functional(self.config_data)
 
@@ -28,6 +43,7 @@ class TrainingSession(TrainingBaseSession):
         with open(CUI_ALPHABET_PATH, "r") as f:
             cui_alphabet = [v.strip() for v in f.readlines()]
 
+        # TODO: This could have been read as a class member, but now that the function is static.
         cui_object = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
         image_prep = ImagePrepare(standard_image_size=(1024, 1024),
                                   standard_image_mode=config_data["image_mode"],
@@ -75,14 +91,16 @@ class TrainingSession(TrainingBaseSession):
 
     def forward_pass(self, mini_batch: Dict[str, Any | torch.Tensor]) -> Dict[str, Any | torch.Tensor]:
         image_tensor = mini_batch["image_tensor"].to(self.device)
-        target_seq = mini_batch["cui_seq"].to(self.device)
+        cui_seq = mini_batch["cui_seq"].to(self.device)
+        input_seq = cui_seq[:, :-1]
+        target_seq = cui_seq[:, 1:]
 
-        prediction_seq = self.network(image_tensor, target_seq)
+        prediction_seq = self.network(image_tensor, input_seq)
 
         return {"target_seq": target_seq, "prediction_seq": prediction_seq}
 
     def loss_function(self, *, prediction_seq: torch.Tensor, target_seq: torch.Tensor) -> torch.Tensor:
-        criterion = torch.nn.CrossEntropyLoss()
+        criterion = torch.nn.CrossEntropyLoss(ignore_index=self.cui_object.c2i[self.cui_object.PAD_TOKEN])
 
         loss = criterion(prediction_seq.transpose(-2, -1), target_seq)
 
@@ -112,13 +130,16 @@ if __name__ == "__main__":
                 f.write(vocab + "\n")
 
     with open(CUI_ALPHABET_PATH, "r") as f:
-        vocab_size = len([line for line in f.readlines()])
+        cui_alphabet = [v.strip() for v in f.readlines()]
+    cui_obj = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
 
-    config = {
+    vocab_size = len(cui_alphabet)
+
+    config_dict = {
         "session": {
-            "device_name": "cuda:0",
+            "device_name": "mps",
             "num_epochs": 500,
-            "mini_batch_size": 46,
+            "mini_batch_size": 32,
             "learning_rate": 0.003,
             "weight_decay": 0.0,
             "dataloader_num_workers": 0,
@@ -157,14 +178,14 @@ if __name__ == "__main__":
                     "input_dim": 256,
                     "hidden_dim": 64,
                     "vocab_size": vocab_size,
-                    "max_len": 8,
-                    "num_layers": 4,
-                    "num_heads": 2
+                    "max_len": 20,
+                    "num_layers": 2,
+                    "num_heads": 4
 
                 }
             }
 
     }
 
-    session = TrainingSession(config)
+    session = TrainingSession(config_dict, cui_obj)
     session()
