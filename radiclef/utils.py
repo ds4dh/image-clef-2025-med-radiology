@@ -10,11 +10,12 @@ from typing import Dict, List, Tuple
 class ConceptUniqueIdentifiers:
     PAD_TOKEN = "<PAD>"
     OOV_TOKEN = "<OOV>"
+    BOS_TOKEN = "<BOS>"
     EOS_TOKEN = "<EOS>"
 
     def __init__(self, alphabet: List[str] | None = None):
         if alphabet is None:
-            self.alphabet: List[str] = [self.PAD_TOKEN, self.OOV_TOKEN, self.EOS_TOKEN]
+            self.alphabet: List[str] = [self.PAD_TOKEN, self.OOV_TOKEN, self.BOS_TOKEN, self.EOS_TOKEN]
         else:
             self.alphabet = self._check_and_get_alphabet(alphabet)
 
@@ -37,8 +38,8 @@ class ConceptUniqueIdentifiers:
 
     def get_alphabet(self, items: List[str]) -> List[str]:
         items = sorted(set(items))
-        items = [item for item in items if item not in {self.PAD_TOKEN, self.OOV_TOKEN, self.EOS_TOKEN}]
-        return [self.PAD_TOKEN, self.OOV_TOKEN, self.EOS_TOKEN] + items
+        items = [item for item in items if item not in {self.PAD_TOKEN, self.OOV_TOKEN, self.BOS_TOKEN, self.EOS_TOKEN}]
+        return [self.PAD_TOKEN, self.OOV_TOKEN, self.BOS_TOKEN, self.EOS_TOKEN] + items
 
     def get_token_to_integer_mapping(self) -> Dict[str, int]:
         return {c: i for i, c in enumerate(self.alphabet)}
@@ -47,7 +48,8 @@ class ConceptUniqueIdentifiers:
         return {i: c for i, c in enumerate(self.alphabet)}
 
     def encode_as_seq(self, items: List[str]) -> List[int]:
-        seq = [self.c2i.get(c, self.c2i[self.OOV_TOKEN]) for c in items]
+        seq = [self.c2i[self.BOS_TOKEN]]
+        seq += [self.c2i.get(c, self.c2i[self.OOV_TOKEN]) for c in items]
         seq += [self.c2i[self.EOS_TOKEN]]
 
         return seq

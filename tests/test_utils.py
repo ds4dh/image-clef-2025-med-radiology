@@ -13,12 +13,13 @@ class ConceptUniqueIdentifiersUnitTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.temp_dir = tempfile.TemporaryDirectory()
+        # TODO: Get rid of the eltorio thing.
         dataset_ = load_dataset("eltorio/ROCOv2-radiology",
                                 split="train",
                                 streaming=True,
                                 cache_dir=cls.temp_dir.name)
 
-        cls.dataset = Dataset.from_list(list(dataset_.take(10)))
+        cls.dataset = Dataset.from_list(list(dataset_.take(20)))
         cls.cui = ConceptUniqueIdentifiers()
 
     @classmethod
@@ -28,6 +29,9 @@ class ConceptUniqueIdentifiersUnitTest(unittest.TestCase):
 
     def test(self):
         items = [cui for item in self.dataset.select(range(0, 10))["cui"] for cui in item]
+        self.cui.integrate_items_into_alphabet(items)
+        print(self.cui.alphabet)
+        items = [cui for item in self.dataset.select(range(10, 20))["cui"] for cui in item]
         self.cui.integrate_items_into_alphabet(items)
         print(self.cui.alphabet)
         decoded_encoded_items = [self.cui.i2c[self.cui.c2i[item]] for item in items]
