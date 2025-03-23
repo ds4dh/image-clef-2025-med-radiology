@@ -6,7 +6,6 @@ from typing import Tuple
 
 from math import log2, comb, gcd, prod
 
-
 Code = namedtuple("Code", ["index", "value"])
 
 
@@ -153,21 +152,19 @@ class TransformerSeqGen(nn.Module):
         return logits
 
     @torch.no_grad()
-    def generate(self, input_vector, max_new_tokens=50, eos_token_id=None, start_token_id=0):
+    def generate(self, input_vector, bos_token_idx, eos_token_idx, max_len=20):
 
         device = input_vector.device
         b = input_vector.size(0)
 
-        input_ids = torch.full((b, 1), start_token_id, dtype=torch.long, device=device)
+        input_ids = torch.full((b, 1), bos_token_idx, dtype=torch.long, device=device)
 
-        for _ in range(max_new_tokens):
+        for _ in range(max_len):
             l = input_ids.size(1)
 
-            # Embed target and decode
-            token_emb = self.token_embedding(input_ids)
+            tgt = self.token_embedding(input_ids)
             pos_ids = torch.arange(l, device=device).unsqueeze(0).expand(b, l)
-            pos_emb = self.pos_embedding(pos_ids)
-            tgt = token_emb + pos_emb
+            tgt = tgt + self.pos_embedding(pos_ids)
 
             memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
             tgt_mask = torch.triu(torch.ones(l, l, device=device), diagonal=1).bool()
@@ -180,9 +177,8 @@ class TransformerSeqGen(nn.Module):
 
             input_ids = torch.cat([input_ids, next_token], dim=1)
 
-            if eos_token_id is not None:
-                if (next_token == eos_token_id).all():
-                    break
+            if (next_token == eos_token_idx).all().item():
+                break
 
         return input_ids
 
@@ -202,10 +198,13 @@ class ConvEmbeddingToSec(torch.nn.Module):
 
         return seq
 
-    def predict(self, image, eos_token, max_len=50):
+    @torch.no_grad()
+    def predict(self, image, bos_token_idx, eos_token_idx, max_len=50):
         b, _, _, _ = image.shape
         emb = (self.conv_embedding(image))
         emb = emb.reshape(b, -1)
 
-        return self.seq_generator.generate(emb, eos_token, max_len)
-
+        return self.seq_generator.generate(emb,
+                                           bos_token_idx=bos_token_idx,
+                                           eos_token_idx=eos_token_idx,
+                                           max_len=max_len)
