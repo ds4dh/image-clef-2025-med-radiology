@@ -117,75 +117,74 @@ class TransformerSeqGen(nn.Module):
         num_layers = config["num_layers"]
         num_heads = config["num_heads"]
 
-        self.input_projection = nn.Linear(input_dim, hidden_dim)
-        self.pos_embedding = nn.Embedding(max_len, hidden_dim)
-
-        self.transformer = nn.Transformer(
-            d_model=hidden_dim,
-            nhead=num_heads,
-            num_encoder_layers=num_layers,
-            num_decoder_layers=num_layers
-        )
-
-        self.token_embedding = nn.Embedding(vocab_size, hidden_dim)
-        self.output_layer = nn.Linear(hidden_dim, vocab_size)
-
         self.hidden_dim = hidden_dim
         self.max_len = max_len
         self.vocab_size = vocab_size
 
-    def forward(self, input_vector, target_seq):
+        self.token_embedding = nn.Embedding(vocab_size, hidden_dim)
+        self.pos_embedding = nn.Embedding(max_len, hidden_dim)
+
+        self.vector_proj = nn.Linear(input_dim, hidden_dim)
+
+        decoder_layer = nn.TransformerDecoderLayer(d_model=hidden_dim, nhead=num_heads, batch_first=True)
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+
+        self.output_proj = nn.Linear(hidden_dim, vocab_size)
+
+    def forward(self, input_vector, target_ids):
         """
-        input_vector: [batch, input_dim]
-        target_seq: [batch, tgt_len] (contains token indices)
+        vector: (b, input_dim)
+        target_ids: (b, l) - token indices
         """
-        batch_size, tgt_len = target_seq.shape
+        b, l = target_ids.size()
 
-        enc_input = self.input_projection(input_vector).unsqueeze(0)  # [1, batch, hidden_dim]
+        token_emb = self.token_embedding(target_ids)  # (b, l, d_model)
+        pos_ids = torch.arange(l, device=target_ids.device).unsqueeze(0).expand(b, l)
+        pos_emb = self.pos_embedding(pos_ids)
+        tgt = token_emb + pos_emb  # (b, l, d_model)
 
-        tgt_emb = self.token_embedding(target_seq)  # [batch, tgt_len, hidden_dim]
+        memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
 
-        pos_ids = torch.arange(tgt_len, device=target_seq.device).unsqueeze(0).expand(batch_size, -1)
-        tgt_emb = tgt_emb + self.pos_embedding(pos_ids)
+        tgt_mask = torch.triu(torch.ones(l, l, device=target_ids.device), diagonal=1).bool()
 
-        tgt_emb = tgt_emb.permute(1, 0, 2)  # [seq_len, batch, hidden_dim]
+        output = self.decoder(tgt=tgt, memory=memory, tgt_mask=tgt_mask)
 
-        tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt_len).to(target_seq.device)
-
-        output = self.transformer(
-            enc_input, tgt_emb, tgt_mask=tgt_mask
-        )  # [tgt_len, batch, hidden_dim]
-
-        output = output.permute(1, 0, 2)  # [batch, tgt_len, hidden_dim]
-        logits = self.output_layer(output)  # [batch, tgt_len, vocab_size]
-
+        logits = self.output_proj(output)
         return logits
 
-    def generate(self, input_vector, eos_token, max_length=50):
+    @torch.no_grad()
+    def generate(self, input_vector, max_new_tokens=50, eos_token_id=None, start_token_id=0):
 
-        input_vector = self.input_projection(input_vector).unsqueeze(0).permute(1, 0, 2)  # [1, batch, hidden_dim]
-        generated_seq = [torch.tensor([0], device=input_vector.device)]  # Start token
+        device = input_vector.device
+        b = input_vector.size(0)
 
-        for _ in range(max_length):
-            tgt_seq = torch.cat(generated_seq, dim=0).unsqueeze(0)  # [1, seq_len]
-            tgt_emb = self.token_embedding(tgt_seq)
+        input_ids = torch.full((b, 1), start_token_id, dtype=torch.long, device=device)
 
-            pos_ids = torch.arange(tgt_seq.shape[1], device=tgt_seq.device).unsqueeze(0)
-            tgt_emb = tgt_emb + self.pos_embedding(pos_ids)
+        for _ in range(max_new_tokens):
+            l = input_ids.size(1)
 
-            output = self.transformer(
-                input_vector, tgt_emb.permute(1, 0, 2),
-                tgt_mask=nn.Transformer.generate_square_subsequent_mask(tgt_seq.shape[1]).to(input_vector.device)
-            )
+            # Embed target and decode
+            token_emb = self.token_embedding(input_ids)
+            pos_ids = torch.arange(l, device=device).unsqueeze(0).expand(b, l)
+            pos_emb = self.pos_embedding(pos_ids)
+            tgt = token_emb + pos_emb
 
-            next_token_logits = self.output_layer(output.permute(1, 0, 2))[:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)  # Greedy decoding
-            generated_seq.append(next_token)
+            memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
+            tgt_mask = torch.triu(torch.ones(l, l, device=device), diagonal=1).bool()
 
-            if next_token.item() == eos_token:
-                break
+            output = self.decoder(tgt=tgt, memory=memory, tgt_mask=tgt_mask)
+            logits = self.output_proj(output)  # (b, l, vocab_size)
 
-        return torch.cat(generated_seq, dim=1)
+            next_token_logits = logits[:, -1, :]  # (b, vocab_size)
+            next_token = next_token_logits.argmax(dim=-1, keepdim=True)  # (b, 1)
+
+            input_ids = torch.cat([input_ids, next_token], dim=1)
+
+            if eos_token_id is not None:
+                if (next_token == eos_token_id).all():
+                    break
+
+        return input_ids
 
 
 class ConvEmbeddingToSec(torch.nn.Module):
@@ -202,3 +201,11 @@ class ConvEmbeddingToSec(torch.nn.Module):
         seq = self.seq_generator(emb, seq)
 
         return seq
+
+    def predict(self, image, eos_token, max_len=50):
+        b, _, _, _ = image.shape
+        emb = (self.conv_embedding(image))
+        emb = emb.reshape(b, -1)
+
+        return self.seq_generator.generate(emb, eos_token, max_len)
+
