@@ -3,7 +3,11 @@ import torch.nn.functional as nn_functional
 from torchvision.transforms.functional import to_tensor, pil_to_tensor
 
 from PIL import Image
+import torchvision.transforms as transforms
+import torchvision.transforms.functional as t_f
+import kornia
 
+import random
 from typing import Dict, List, Tuple
 
 
@@ -144,3 +148,56 @@ class ImagePrepare:
 
     def __call__(self, image: Image) -> torch.Tensor:
         return self.run(image)
+
+
+class ImageAugment:
+    # TODO: Test this class.
+    def __init__(self, config: Dict):
+        image_size = config["image_size"]
+        self.config = config["image_augment_transforms"]
+
+        self.illumination = kornia.augmentation.RandomLinearIllumination(
+            gain=self.config["random_linear_illumination"]["gain"],
+            p=self.config["random_linear_illumination"]["p"],
+        )
+
+        self.adjust_sharpness = transforms.RandomAdjustSharpness(
+            sharpness_factor=self.config["random_adjust_sharpness"]["sharpness_factor"],
+            p=self.config["random_adjust_sharpness"]["p"])
+
+        self.color_jitter = transforms.ColorJitter(brightness=self.config["jitter"]["brightness"],
+                                                   saturation=self.config["jitter"]["saturation"],
+                                                   contrast=self.config["jitter"]["contrast"])
+
+        self.resized_cropper = transforms.RandomResizedCrop(size=image_size,
+                                                            ratio=tuple(self.config["random_resized_crop"]["ratio"]),
+                                                            scale=tuple(self.config["random_resized_crop"]["scale"]),
+                                                            antialias=True)
+
+        self.rotator = transforms.RandomRotation(degrees=tuple(self.config["random_rotation"]["degrees"]))
+
+    def run(self, image: torch.Tensor) -> torch.Tensor:
+        image = self.illumination(image)
+        image = self.adjust_sharpness(image)
+        if random.random() < self.config["jitter"]["p"]:
+            image = self.color_jitter(image)
+
+        if random.random() < self.config["random_resized_crop"]["p"]:
+            _i, _j, _h, _w = self.resized_cropper.get_params(image,
+                                                             list(self.resized_cropper.scale),
+                                                             list(self.resized_cropper.ratio))
+
+            image = t_f.resized_crop(image, _i, _j, _h, _w, self.resized_cropper.size,
+                                     self.resized_cropper.interpolation,
+                                     antialias=True)
+        if random.random() < self.config["random_rotation"]["p"]:
+            _a = self.rotator.get_params(self.rotator.degrees)
+            image = t_f.rotate(image, _a, t_f.InterpolationMode.NEAREST, self.rotator.expand, self.rotator.center,
+                               self.rotator.fill)
+
+        return image
+
+    def __call__(self, image: torch.Tensor) -> torch.Tensor:
+        image = self.run(image)
+
+        return image

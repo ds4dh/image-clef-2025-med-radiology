@@ -1,11 +1,10 @@
 from radiclef import RESOURCES_DIR, ROCO_DATABASE_PATH
-from radiclef.utils import ConceptUniqueIdentifiers, ImagePrepare
+from radiclef.utils import ConceptUniqueIdentifiers, ImagePrepare, ImageAugment
 from radiclef.networks import ConvEmbeddingToSec
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from datasets import Dataset, load_from_disk
-
 
 from torchbase import TrainingBaseSession
 from torchbase.utils import BaseMetricsClass, ValidationDatasetsDict
@@ -70,15 +69,23 @@ class TrainingSession(TrainingBaseSession):
                                   standard_image_mode=config_data["image_mode"],
                                   concatenate_positional_embedding=config_data["image_positional_embedding"])
 
-        def map_fields(example):
+        image_augment = ImageAugment(config_data)
+
+        def map_fields(example: Dict[str, List], do_transforms: bool):
             if len(example["image"]) == 1:
                 image_tensor = image_prep(example["image"][0])
-                cui_seq = torch.tensor(CUI_OBJ.encode_as_seq(example["cui_codes"][0]))
+                if do_transforms:
+                    image_tensor = image_augment(image_tensor)
+
+                cui_seq = torch.tensor(CUI_OBJ.encode_as_seq(example["cui_codes"][0])).unsqueeze(0)
             else:
-                image_tensor = torch.cat([image_prep(_img).unsqueeze(0) for _img in example["image"]], dim=0)
+                image_tensor = torch.cat(
+                    [image_augment(image_prep(_img).unsqueeze(0)) if do_transforms else image_prep(_img)
+                     for _img in example["image"]],
+                    dim=0
+                )
                 cui_seq = pad_sequence([torch.tensor(CUI_OBJ.encode_as_seq(_c)) for _c in example["cui_codes"]],
                                        batch_first=True, padding_value=CUI_OBJ.c2i[CUI_OBJ.PAD_TOKEN])
-            # TODO: Add some basic image augmentation
 
             return {
                 "image_tensor": image_tensor,
@@ -86,10 +93,11 @@ class TrainingSession(TrainingBaseSession):
             }
 
         dataset_train = dataset_dict["train"]
-        dataset_train.set_transform(lambda x: map_fields(x))
+        dataset_train.set_transform(
+            lambda x: map_fields(x, do_transforms=config_data["image_augment_transforms"]["do_transforms"]))
 
         dataset_valid = dataset_dict["valid"]
-        dataset_valid.set_transform(lambda x: map_fields(x))
+        dataset_valid.set_transform(lambda x: map_fields(x, do_transforms=False))
 
         return dataset_train, ValidationDatasetsDict(
             datasets=(dataset_valid,),
@@ -129,7 +137,6 @@ class TrainingSession(TrainingBaseSession):
 
 
 if __name__ == "__main__":
-
     vocab_size = len(CUI_ALPHABET)
     with open(os.path.join(os.getcwd(), "config.json"), "r") as f:
         config_dict = json.load(f)

@@ -4,8 +4,8 @@
     "num_epochs": 500,
     "mini_batch_size": 32,
     "learning_rate": 0.003,
-    "weight_decay": 0.0,
-    "dataloader_num_workers": 0,
+    "weight_decay": 1e-5,
+    "dataloader_num_workers": 4,
     "tag_postfix": null
   },
   "data": {
@@ -19,14 +19,14 @@
       "do_transforms": true,
       "random_linear_illumination": {
         "p": 0.3,
-        "gain": 0.3
+        "gain": 0.1
       },
       "random_adjust_sharpness": {
-        "p": 0.0,
+        "p": 0.1,
         "sharpness_factor": 2
       },
       "jitter": {
-        "p": 0.0,
+        "p": 0.1,
         "brightness": 0.1,
         "saturation": 0.0,
         "contrast": 0.1
@@ -66,9 +66,9 @@
       "channels_list": [
         5,
         8,
-        16,
-        16,
-        16,
+        8,
+        8,
+        8,
         16
       ],
       "num_out_channels": 1,
@@ -77,8 +77,8 @@
     "sequence_generator": {
       "input_dim": 256,
       "hidden_dim": 64,
-      "max_len": 20,
-      "num_layers": 2,
+      "max_len": 32,
+      "num_layers": 3,
       "num_heads": 4
     }
   }
