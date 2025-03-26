@@ -79,7 +79,9 @@
       "hidden_dim": 64,
       "max_len": 32,
       "num_layers": 3,
-      "num_heads": 4
+      "num_heads": 4,
+      "dim_feedforward": 128,
+      "dropout": 0.1
     }
   }
 }

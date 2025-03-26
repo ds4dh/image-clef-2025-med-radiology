@@ -115,17 +115,21 @@ class TransformerSeqGen(nn.Module):
         max_len = config["max_len"]
         num_layers = config["num_layers"]
         num_heads = config["num_heads"]
-
-        self.hidden_dim = hidden_dim
-        self.max_len = max_len
-        self.vocab_size = vocab_size
+        dim_feedforward = config["dim_feedforward"]
+        dropout = config["dropout"]
 
         self.token_embedding = nn.Embedding(vocab_size, hidden_dim)
         self.pos_embedding = nn.Embedding(max_len, hidden_dim)
 
         self.vector_proj = nn.Linear(input_dim, hidden_dim)
 
-        decoder_layer = nn.TransformerDecoderLayer(d_model=hidden_dim, nhead=num_heads, batch_first=True)
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=hidden_dim,
+            nhead=num_heads,
+            batch_first=True,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout
+        )
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
 
         self.output_proj = nn.Linear(hidden_dim, vocab_size)
