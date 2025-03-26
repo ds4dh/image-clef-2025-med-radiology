@@ -15,7 +15,8 @@ dependencies = [
     "pillow",
     "scikit-learn",
     "tensorboard",
-    "torchinfo"
+    "torchinfo",
+    "kornia"
 ]
 
 
