@@ -6,12 +6,14 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from datasets import Dataset, load_dataset, load_from_disk, DatasetDict
 
+
 from torchbase import TrainingBaseSession
 from torchbase.utils import BaseMetricsClass, ValidationDatasetsDict
 
 from typing import Any, Dict, List, Tuple
 
 import os
+import json
 
 CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
 
@@ -45,7 +47,7 @@ class TrainingSession(TrainingBaseSession):
 
         # TODO: This could have been read as a class member, but now that the function is static.
         cui_object = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
-        image_prep = ImagePrepare(standard_image_size=(1024, 1024),
+        image_prep = ImagePrepare(standard_image_size=config_data["image_size"],
                                   standard_image_mode=config_data["image_mode"],
                                   concatenate_positional_embedding=config_data["image_positional_embedding"])
 
@@ -134,58 +136,10 @@ if __name__ == "__main__":
     cui_obj = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
 
     vocab_size = len(cui_alphabet)
+    with open(os.path.join(os.getcwd(), "config.json"), "r") as f:
+        config_dict = json.load(f)
 
-    config_dict = {
-        "session": {
-            "device_name": "mps",
-            "num_epochs": 500,
-            "mini_batch_size": 32,
-            "learning_rate": 0.003,
-            "weight_decay": 0.0,
-            "dataloader_num_workers": 0,
-            "tag_postfix": None
-        },
-        "data": {
-            "image_positional_embedding": True,
-            "image_mode": "L"
-        },
-        "metrics": {
-
-        },
-        "network":
-            {
-                "architecture": "ConvEmbeddingToSec",
-                "convolutional_embedding": {
-                    "sampling_ratio_list": [
-                        2,
-                        2,
-                        2,
-                        2,
-                        4
-                    ],
-                    "channels_list": [
-                        3,
-                        8,
-                        16,
-                        16,
-                        16,
-                        16
-                    ],
-                    "num_out_channels": 1,
-                    "dropout": 0.1
-                },
-                "sequence_generator": {
-                    "input_dim": 256,
-                    "hidden_dim": 64,
-                    "vocab_size": vocab_size,
-                    "max_len": 20,
-                    "num_layers": 2,
-                    "num_heads": 4
-
-                }
-            }
-
-    }
+    config_dict["network"]["sequence_generator"]["vocab_size"] = vocab_size
 
     session = TrainingSession(config_dict, cui_obj)
     session()

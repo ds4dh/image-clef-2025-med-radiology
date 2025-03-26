@@ -1,0 +1,46 @@
+{
+  "session": {
+    "device_name": "mps",
+    "num_epochs": 500,
+    "mini_batch_size": 32,
+    "learning_rate": 0.003,
+    "weight_decay": 0.0,
+    "dataloader_num_workers": 0,
+    "tag_postfix": null
+  },
+  "data": {
+    "image_positional_embedding": true,
+    "image_mode": "L"
+  },
+  "metrics": {
+  },
+  "network": {
+    "architecture": "ConvEmbeddingToSec",
+    "convolutional_embedding": {
+      "sampling_ratio_list": [
+        2,
+        2,
+        2,
+        2,
+        4
+      ],
+      "channels_list": [
+        3,
+        8,
+        16,
+        16,
+        16,
+        16
+      ],
+      "num_out_channels": 1,
+      "dropout": 0.1
+    },
+    "sequence_generator": {
+      "input_dim": 256,
+      "hidden_dim": 64,
+      "max_len": 20,
+      "num_layers": 2,
+      "num_heads": 4
+    }
+  }
+}
