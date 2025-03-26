@@ -4,7 +4,7 @@ from radiclef.networks import ConvEmbeddingToSec
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
-from datasets import Dataset, load_dataset, load_from_disk, DatasetDict
+from datasets import Dataset, load_from_disk
 
 
 from torchbase import TrainingBaseSession
@@ -16,6 +16,30 @@ import os
 import json
 
 CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
+if not os.path.exists(CUI_ALPHABET_PATH):
+
+    dataset = load_from_disk(ROCO_DATABASE_PATH)["train"]
+    dataset = dataset.remove_columns([col for col in dataset.features if col != "cui_codes"])
+    cui_obj = ConceptUniqueIdentifiers()
+
+    print("Generating the CUI alphabet for the first time ..")
+    batch_size = 100
+    for start_idx in range(0, len(dataset), batch_size):
+        end_idx = min(start_idx + batch_size, len(dataset))
+        print("Analyzing range [{}, {}) from database of length {}".format(
+            start_idx, end_idx, len(dataset)))
+
+        items = [cui for item in dataset.select(range(start_idx, end_idx))["cui_codes"] for cui in item]
+        cui_obj.integrate_items_into_alphabet(items)
+
+    with open(CUI_ALPHABET_PATH, "w") as f:
+        for vocab in cui_obj.alphabet:
+            f.write(vocab + "\n")
+
+with open(CUI_ALPHABET_PATH, "r") as f:
+    CUI_ALPHABET = [v.strip() for v in f.readlines()]
+
+CUI_OBJ = ConceptUniqueIdentifiers(alphabet=CUI_ALPHABET)
 
 
 class TrainingSession(TrainingBaseSession):
@@ -41,24 +65,19 @@ class TrainingSession(TrainingBaseSession):
     def init_datasets_functional(config_data: Dict) -> Tuple[Dataset, ValidationDatasetsDict]:
 
         dataset_dict = load_from_disk(ROCO_DATABASE_PATH)
-
-        with open(CUI_ALPHABET_PATH, "r") as f:
-            cui_alphabet = [v.strip() for v in f.readlines()]
-
-        # TODO: This could have been read as a class member, but now that the function is static.
-        cui_object = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
-        image_prep = ImagePrepare(standard_image_size=config_data["image_size"],
+        image_height, image_width = config_data["image_size"]
+        image_prep = ImagePrepare(standard_image_size=(image_height, image_width),
                                   standard_image_mode=config_data["image_mode"],
                                   concatenate_positional_embedding=config_data["image_positional_embedding"])
 
         def map_fields(example):
             if len(example["image"]) == 1:
                 image_tensor = image_prep(example["image"][0])
-                cui_seq = torch.tensor(cui_object.encode_as_seq(example["cui_codes"][0]))
+                cui_seq = torch.tensor(CUI_OBJ.encode_as_seq(example["cui_codes"][0]))
             else:
                 image_tensor = torch.cat([image_prep(_img).unsqueeze(0) for _img in example["image"]], dim=0)
-                cui_seq = pad_sequence([torch.tensor(cui_object.encode_as_seq(_c)) for _c in example["cui_codes"]],
-                                       batch_first=True, padding_value=cui_object.c2i[cui_object.PAD_TOKEN])
+                cui_seq = pad_sequence([torch.tensor(CUI_OBJ.encode_as_seq(_c)) for _c in example["cui_codes"]],
+                                       batch_first=True, padding_value=CUI_OBJ.c2i[CUI_OBJ.PAD_TOKEN])
             # TODO: Add some basic image augmentation
 
             return {
@@ -111,35 +130,11 @@ class TrainingSession(TrainingBaseSession):
 
 if __name__ == "__main__":
 
-    if not os.path.exists(CUI_ALPHABET_PATH):
-
-        dataset = load_from_disk(ROCO_DATABASE_PATH)["train"]
-        dataset = dataset.remove_columns([col for col in dataset.features if col != "cui_codes"])
-        cui_obj = ConceptUniqueIdentifiers()
-
-        print("Generating the CUI alphabet for the first time ..")
-        batch_size = 100
-        for start_idx in range(0, len(dataset), batch_size):
-            end_idx = min(start_idx + batch_size, len(dataset))
-            print("Analyzing range [{}, {}) from database of length {}".format(
-                start_idx, end_idx, len(dataset)))
-
-            items = [cui for item in dataset.select(range(start_idx, end_idx))["cui_codes"] for cui in item]
-            cui_obj.integrate_items_into_alphabet(items)
-
-        with open(CUI_ALPHABET_PATH, "w") as f:
-            for vocab in cui_obj.alphabet:
-                f.write(vocab + "\n")
-
-    with open(CUI_ALPHABET_PATH, "r") as f:
-        cui_alphabet = [v.strip() for v in f.readlines()]
-    cui_obj = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
-
-    vocab_size = len(cui_alphabet)
+    vocab_size = len(CUI_ALPHABET)
     with open(os.path.join(os.getcwd(), "config.json"), "r") as f:
         config_dict = json.load(f)
 
     config_dict["network"]["sequence_generator"]["vocab_size"] = vocab_size
 
-    session = TrainingSession(config_dict, cui_obj)
+    session = TrainingSession(config_dict, CUI_OBJ)
     session()

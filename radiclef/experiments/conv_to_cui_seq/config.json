@@ -9,8 +9,47 @@
     "tag_postfix": null
   },
   "data": {
+    "image_size": [
+      1024,
+      1024
+    ],
     "image_positional_embedding": true,
-    "image_mode": "L"
+    "image_mode": "RGB",
+    "image_augment_transforms": {
+      "do_transforms": true,
+      "random_linear_illumination": {
+        "p": 0.3,
+        "gain": 0.3
+      },
+      "random_adjust_sharpness": {
+        "p": 0.0,
+        "sharpness_factor": 2
+      },
+      "jitter": {
+        "p": 0.0,
+        "brightness": 0.1,
+        "saturation": 0.0,
+        "contrast": 0.1
+      },
+      "random_resized_crop": {
+        "p": 0.1,
+        "ratio": [
+          0.8,
+          1.2
+        ],
+        "scale": [
+          0.25,
+          1.5
+        ]
+      },
+      "random_rotation": {
+        "p": 0.4,
+        "degrees": [
+          -45,
+          45
+        ]
+      }
+    }
   },
   "metrics": {
   },
@@ -25,7 +64,7 @@
         4
       ],
       "channels_list": [
-        3,
+        5,
         8,
         16,
         16,
