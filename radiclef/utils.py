@@ -177,10 +177,10 @@ class ImageAugment:
         self.rotator = transforms.RandomRotation(degrees=tuple(self.config["random_rotation"]["degrees"]))
 
     def run(self, image: torch.Tensor) -> torch.Tensor:
-        image = self.illumination(image)
-        image[:, 0:-2, :, :] = self.adjust_sharpness(image[:, 0:-2, :, :])
+        image = self.illumination(image).squeeze(0)
+        image[0:-2, :, :] = self.adjust_sharpness(image[0:-2, :, :])
         if random.random() < self.config["jitter"]["p"]:
-            image[:, 0:-2, :, :] = self.color_jitter(image[:, 0:-2, :, :])
+            image[0:-2, :, :] = self.color_jitter(image[0:-2, :, :])
 
         if random.random() < self.config["random_resized_crop"]["p"]:
             _i, _j, _h, _w = self.resized_cropper.get_params(image,

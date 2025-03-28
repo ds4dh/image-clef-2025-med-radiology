@@ -84,7 +84,7 @@ class TrainingSession(TrainingBaseSession):
                 cui_seq = torch.tensor(CUI_OBJ.encode_as_seq(example["cui_codes"][0])).unsqueeze(0)
             else:
                 if do_transforms:
-                    batch = [image_augment(image_prep(_img).unsqueeze(0)) for _img in example["image"]]
+                    batch = [image_augment(image_prep(_img)).unsqueeze(0) for _img in example["image"]]
                 else:
                     batch = [image_prep(_img).unsqueeze(0) for _img in example["image"]]
 
