@@ -69,7 +69,11 @@ class TrainingSession(TrainingBaseSession):
                                   standard_image_mode=config_data["image_mode"],
                                   concatenate_positional_embedding=config_data["image_positional_embedding"])
 
-        image_augment = ImageAugment(config_data)
+        do_image_augment_transforms = False
+        if "image_augment_transforms" in config_data.keys():
+            if config_data["image_augment_transforms"]["do_transforms"]:
+                do_image_augment_transforms = True
+                image_augment = ImageAugment(config_data)
 
         def map_fields(example: Dict[str, List], do_transforms: bool):
             if len(example["image"]) == 1:
@@ -79,11 +83,12 @@ class TrainingSession(TrainingBaseSession):
 
                 cui_seq = torch.tensor(CUI_OBJ.encode_as_seq(example["cui_codes"][0])).unsqueeze(0)
             else:
-                image_tensor = torch.cat(
-                    [image_augment(image_prep(_img).unsqueeze(0)) if do_transforms else image_prep(_img)
-                     for _img in example["image"]],
-                    dim=0
-                )
+                if do_transforms:
+                    batch = [image_augment(image_prep(_img).unsqueeze(0)) for _img in example["image"]]
+                else:
+                    batch = [image_prep(_img).unsqueeze(0) for _img in example["image"]]
+
+                image_tensor = torch.cat(batch, dim=0)
                 cui_seq = pad_sequence([torch.tensor(CUI_OBJ.encode_as_seq(_c)) for _c in example["cui_codes"]],
                                        batch_first=True, padding_value=CUI_OBJ.c2i[CUI_OBJ.PAD_TOKEN])
 
@@ -94,7 +99,7 @@ class TrainingSession(TrainingBaseSession):
 
         dataset_train = dataset_dict["train"]
         dataset_train.set_transform(
-            lambda x: map_fields(x, do_transforms=config_data["image_augment_transforms"]["do_transforms"]))
+            lambda x: map_fields(x, do_transforms=do_image_augment_transforms))
 
         dataset_valid = dataset_dict["valid"]
         dataset_valid.set_transform(lambda x: map_fields(x, do_transforms=False))
