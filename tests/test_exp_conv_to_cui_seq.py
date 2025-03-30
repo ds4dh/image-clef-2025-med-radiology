@@ -11,7 +11,48 @@ import os
 class InitDatasetsUnitTest(unittest.TestCase):
     def setUp(self):
         self.config_data = {
-            "download_only_num_elements_of_dataset": 400
+
+            "image_size": [
+                1024,
+                1024
+            ],
+            "image_positional_embedding": True,
+            "image_mode": "RGB",
+            "image_augment_transforms": {
+                "do_transforms": True,
+                "random_linear_illumination": {
+                    "p": 0.3,
+                    "gain": 0.1
+                },
+                "random_adjust_sharpness": {
+                    "p": 0.1,
+                    "sharpness_factor": 2
+                },
+                "jitter": {
+                    "p": 0.1,
+                    "brightness": 0.1,
+                    "saturation": 0.0,
+                    "contrast": 0.1
+                },
+                "random_resized_crop": {
+                    "p": 0.1,
+                    "ratio": [
+                        0.8,
+                        1.2
+                    ],
+                    "scale": [
+                        0.25,
+                        1.5
+                    ]
+                },
+                "random_rotation": {
+                    "p": 0.4,
+                    "degrees": [
+                        -45,
+                        45
+                    ]
+                }
+            }
         }
         self.dataset_train, self.dataset_valid_dict = TrainingSession.init_datasets_functional(self.config_data)
 
@@ -28,17 +69,30 @@ class InitDatasetsUnitTest(unittest.TestCase):
             examples = torch.utils.data.default_collate(batch)
             return examples
 
-        dataloader = torch.utils.data.DataLoader(self.dataset_train, batch_size=5, collate_fn=collate_fn, shuffle=True)
-        mini_batch = next(iter(dataloader))
-        print(mini_batch.keys())
-        print(mini_batch["image_tensor"].shape)
-        print(mini_batch["cui_seq"].shape)
-        print(mini_batch["cui_seq"])
+        dataset = self.dataset_train.select(range(0, 100))
+
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=12, collate_fn=collate_fn, shuffle=True)
+
+        for mini_batch in dataloader:
+            print(mini_batch.keys())
+            print(mini_batch["image_tensor"].shape)
+            print(mini_batch["cui_seq"].shape)
+            print(mini_batch["cui_seq"])
 
 
 class InitNetworkUnitTest(unittest.TestCase):
     def setUp(self):
-        dataset, _ = TrainingSession.init_datasets_functional({"download_only_num_elements_of_dataset": 400})
+        dataset, _ = TrainingSession.init_datasets_functional(
+            {
+                "image_size": [
+                    1024,
+                    1024
+                ],
+                "image_positional_embedding": True,
+                "image_mode": "RGB",
+            }
+        )
+
         self.dataloader = torch.utils.data.DataLoader(dataset, batch_size=5)
         with open(CUI_ALPHABET_PATH, "r") as f:
             vocab_size = len([line for line in f.readlines()])
