@@ -1,9 +1,11 @@
 from radiclef.utils import ConceptUniqueIdentifiers
 from radiclef.utils import ImagePrepare
 
+from radiclef import ROCO_DATABASE_PATH
+
 import torch
 
-from datasets import Dataset, load_dataset
+from datasets import Dataset, load_from_disk
 
 import unittest
 import tempfile
@@ -13,11 +15,7 @@ class ConceptUniqueIdentifiersUnitTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.temp_dir = tempfile.TemporaryDirectory()
-        # TODO: Get rid of the eltorio thing.
-        dataset_ = load_dataset("eltorio/ROCOv2-radiology",
-                                split="train",
-                                streaming=True,
-                                cache_dir=cls.temp_dir.name)
+        dataset_ = load_from_disk(ROCO_DATABASE_PATH)["train"]
 
         cls.dataset = Dataset.from_list(list(dataset_.take(20)))
         cls.cui = ConceptUniqueIdentifiers()
@@ -28,10 +26,10 @@ class ConceptUniqueIdentifiersUnitTest(unittest.TestCase):
         # os._exit(0)
 
     def test(self):
-        items = [cui for item in self.dataset.select(range(0, 10))["cui"] for cui in item]
+        items = [cui for item in self.dataset.select(range(0, 10))["cui_codes"] for cui in item]
         self.cui.integrate_items_into_alphabet(items)
         print(self.cui.alphabet)
-        items = [cui for item in self.dataset.select(range(10, 20))["cui"] for cui in item]
+        items = [cui for item in self.dataset.select(range(10, 20))["cui_codes"] for cui in item]
         self.cui.integrate_items_into_alphabet(items)
         print(self.cui.alphabet)
         decoded_encoded_items = [self.cui.i2c[self.cui.c2i[item]] for item in items]
@@ -42,10 +40,8 @@ class ImagePrepareUnitTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp_dir = tempfile.TemporaryDirectory()
-        dataset_ = load_dataset("eltorio/ROCOv2-radiology",
-                                split="train",
-                                streaming=True,
-                                cache_dir=cls.temp_dir.name)
+
+        dataset_ = load_from_disk(ROCO_DATABASE_PATH)["train"]
 
         cls.dataset = Dataset.from_list(list(dataset_.take(10)))
 
