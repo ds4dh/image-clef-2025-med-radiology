@@ -58,12 +58,19 @@ class ConceptUniqueIdentifiers:
 
         return seq
 
+    def decode_preprocess(self, seq: List[int]) -> List[int]:
+        if seq[0] == self.c2i[self.BOS_TOKEN]:
+            seq = seq[1:]
+
+        if self.c2i[self.EOS_TOKEN] in seq:
+            eos_seq_index = seq.index(self.c2i[self.EOS_TOKEN])
+            seq = seq[0:eos_seq_index]
+
+        return seq
+
     def decode(self, seq: List[int]) -> List[str]:
-        seq_decoded = []
-        for idx in seq:
-            seq_decoded.append(self.i2c[idx])
-            if idx == self.c2i[self.EOS_TOKEN]:
-                break
+        seq = self.decode_preprocess(seq)
+        seq_decoded = [self.i2c[item] for item in seq]
 
         return seq_decoded
 
