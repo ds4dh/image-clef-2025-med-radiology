@@ -2,10 +2,10 @@
   "session": {
     "device_name": "mps",
     "num_epochs": 500,
-    "mini_batch_size": 32,
+    "mini_batch_size": 16,
     "learning_rate": 0.003,
     "weight_decay": 1e-5,
-    "dataloader_num_workers": 4,
+    "dataloader_num_workers": 0,
     "tag_postfix": null
   },
   "data": {
@@ -52,6 +52,9 @@
     }
   },
   "metrics": {
+    "F1Metric": [
+      "f1_score"
+    ]
   },
   "network": {
     "architecture": "ConvEmbeddingToSec",

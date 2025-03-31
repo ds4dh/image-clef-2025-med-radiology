@@ -1,5 +1,7 @@
 from radiclef.experiments.conv_to_cui_seq.main import TrainingSession
 from radiclef.experiments.conv_to_cui_seq.main import CUI_ALPHABET_PATH
+from radiclef.experiments.conv_to_cui_seq.main import F1Metric
+
 
 import unittest
 
@@ -137,6 +139,41 @@ class InitNetworkUnitTest(unittest.TestCase):
         out = self.network(image_tensor, cui_seq)
         print(image_tensor.shape)
         print(out.shape)
+
+
+class F1MetricUnitTest(unittest.TestCase):
+    def setUp(self):
+        dataset, _ = TrainingSession.init_datasets_functional(
+            {
+                "image_size": [
+                    1024,
+                    1024
+                ],
+                "image_positional_embedding": True,
+                "image_mode": "RGB",
+            }
+        )
+
+        self.dataloader = torch.utils.data.DataLoader(dataset, batch_size=5)
+        self.metric = F1Metric()
+        self.cui_obj = self.metric.CUI_OBJ
+
+    def test(self):
+        mini_batch = next(iter(self.dataloader))
+        gt_seq = mini_batch["cui_seq"]
+        b, _ = gt_seq.shape
+        p_seq = torch.cat((
+            self.cui_obj.c2i[self.cui_obj.BOS_TOKEN] * torch.ones(b, 1),
+            torch.randint(0, len(self.cui_obj.alphabet), (b, 10)),
+            self.cui_obj.c2i[self.cui_obj.EOS_TOKEN] * torch.ones(b, 1),
+        ), dim=1).long()
+
+        gt_1h, p_1h = self.metric._check_and_prepare_inputs(ground_truth_seq=gt_seq, prediction_seq=p_seq)
+
+        print(gt_1h)
+
+        self.assertEqual(self.metric.f1_score(ground_truth_seq=gt_seq, prediction_seq=gt_seq), 1.0)
+        self.assertLess(self.metric.f1_score(ground_truth_seq=gt_seq, prediction_seq=p_seq), 0.01)
 
 
 if __name__ == "__main__":

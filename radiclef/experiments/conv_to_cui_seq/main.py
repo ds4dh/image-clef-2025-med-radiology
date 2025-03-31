@@ -2,9 +2,11 @@ from radiclef import RESOURCES_DIR, ROCO_DATABASE_PATH
 from radiclef.utils import ConceptUniqueIdentifiers, ImagePrepare, ImageAugment
 from radiclef.networks import ConvEmbeddingToSec
 
+import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from datasets import Dataset, load_from_disk
+from sklearn.metrics import f1_score
 
 from torchbase import TrainingBaseSession
 from torchbase.utils import BaseMetricsClass, ValidationDatasetsDict
@@ -120,8 +122,9 @@ class TrainingSession(TrainingBaseSession):
         return self.init_network_functional(self.config_network)
 
     def init_metrics(self) -> List[BaseMetricsClass] | None:
-        # TODO: Add metrics from official challenge repo
-        return
+        metrics = F1Metric(keyword_maps={"target_seq": "ground_truth_seq", "prediction_seq": "prediction_seq"})
+
+        return [metrics]
 
     def forward_pass(self, mini_batch: Dict[str, Any | torch.Tensor]) -> Dict[str, Any | torch.Tensor]:
         image_tensor = mini_batch["image_tensor"].to(self.device)
@@ -129,16 +132,74 @@ class TrainingSession(TrainingBaseSession):
         input_seq = cui_seq[:, :-1]
         target_seq = cui_seq[:, 1:]
 
-        prediction_seq = self.network(image_tensor, input_seq)
+        output = self.network(image_tensor, input_seq)
 
-        return {"target_seq": target_seq, "prediction_seq": prediction_seq}
+        return {"target_seq": target_seq, "output": output, "prediction_seq": output.argmax(dim=-1)}
 
-    def loss_function(self, *, prediction_seq: torch.Tensor, target_seq: torch.Tensor) -> torch.Tensor:
+    def loss_function(self, *, output: torch.Tensor, target_seq: torch.Tensor) -> torch.Tensor:
         criterion = torch.nn.CrossEntropyLoss(ignore_index=self.cui_object.c2i[self.cui_object.PAD_TOKEN])
 
-        loss = criterion(prediction_seq.transpose(-2, -1), target_seq)
+        loss = criterion(output.transpose(-2, -1), target_seq)
 
         return loss
+
+
+class F1Metric(BaseMetricsClass):
+    CUI_OBJ: ConceptUniqueIdentifiers = CUI_OBJ
+
+    def __init__(self, keyword_maps: Dict[str, str] | None = None):
+        if not isinstance(self.CUI_OBJ, ConceptUniqueIdentifiers):
+            raise ValueError
+        super().__init__(keyword_maps)
+
+    def _check_and_prepare_inputs(self, *, ground_truth_seq: torch.Tensor,
+                                  prediction_seq: torch.Tensor) -> Tuple[np.ndarray, np.ndarray]:
+
+        assert isinstance(ground_truth_seq, torch.Tensor)
+        assert isinstance(prediction_seq, torch.Tensor)
+
+        assert ground_truth_seq.shape[0] == prediction_seq.shape[0]
+
+        b, _ = ground_truth_seq.shape
+
+        ground_truth_seq = ground_truth_seq.tolist()
+        prediction_seq = prediction_seq.tolist()
+
+        ground_truth_multi_hot = np.zeros((b, len(self.CUI_OBJ.alphabet)), dtype=np.int64)
+        predictions_multi_hot = np.zeros((b, len(self.CUI_OBJ.alphabet)), dtype=np.int64)
+        for ind, (gt_seq, p_seq) in enumerate(zip(ground_truth_seq, prediction_seq)):
+            gt_seq = self.CUI_OBJ.decode_preprocess(gt_seq)
+            p_seq = self.CUI_OBJ.decode_preprocess(p_seq)
+            ground_truth_multi_hot[ind, gt_seq] = 1
+            predictions_multi_hot[ind, p_seq] = 1
+
+        return ground_truth_multi_hot, predictions_multi_hot
+
+    def _calculate_f1_from_multi_hot(self, *, ground_truth_multi_hot: np.ndarray,
+                                     prediction_multi_hot: np.ndarray) -> float:
+
+        assert ground_truth_multi_hot.shape == prediction_multi_hot.shape
+        assert ground_truth_multi_hot.shape[1] == self.CUI_OBJ.alphabet.__len__()
+
+        scores = []
+        for yt, yp in zip(ground_truth_multi_hot, prediction_multi_hot):
+            if np.sum(yt) == 0:
+                continue
+            f1 = f1_score(yt, yp, average="binary", zero_division=0)
+            scores.append(f1)
+
+        return np.mean(scores) if scores else 0.0
+
+    def f1_score(self, *, ground_truth_seq: torch.Tensor,
+                 prediction_seq: torch.Tensor) -> float:
+
+        ground_truth_multi_hot, predictions_multi_hot = self._check_and_prepare_inputs(
+            ground_truth_seq=ground_truth_seq, prediction_seq=prediction_seq)
+
+        score = self._calculate_f1_from_multi_hot(ground_truth_multi_hot=ground_truth_multi_hot,
+                                                  prediction_multi_hot=predictions_multi_hot)
+
+        return score
 
 
 if __name__ == "__main__":
