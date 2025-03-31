@@ -1,11 +1,11 @@
 {
   "session": {
-    "device_name": "mps",
+    "device_name": "cuda:0",
     "num_epochs": 500,
-    "mini_batch_size": 16,
+    "mini_batch_size": 86,
     "learning_rate": 0.003,
     "weight_decay": 1e-5,
-    "dataloader_num_workers": 0,
+    "dataloader_num_workers": 8,
     "tag_postfix": null
   },
   "data": {
@@ -61,14 +61,12 @@
     "convolutional_embedding": {
       "sampling_ratio_list": [
         2,
-        2,
-        2,
-        2,
+        4,
+        4,
         4
       ],
       "channels_list": [
         5,
-        8,
         8,
         8,
         8,
@@ -78,12 +76,12 @@
       "dropout": 0.1
     },
     "sequence_generator": {
-      "input_dim": 256,
-      "hidden_dim": 64,
+      "input_dim": 64,
+      "hidden_dim": 32,
       "max_len": 32,
-      "num_layers": 3,
-      "num_heads": 4,
-      "dim_feedforward": 128,
+      "num_layers": 2,
+      "num_heads": 1,
+      "dim_feedforward": 32,
       "dropout": 0.1
     }
   }
