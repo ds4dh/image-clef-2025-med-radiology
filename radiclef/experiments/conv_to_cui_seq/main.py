@@ -210,4 +210,11 @@ if __name__ == "__main__":
     config_dict["network"]["sequence_generator"]["vocab_size"] = vocab_size
 
     session = TrainingSession(config_dict, CUI_OBJ)
+    layout_dict = {
+        'Loss': {
+            'Loss (train vs val)': ['Multiline', ['training/loss/epochs',
+                                                  'validation-valid/loss/epochs']],
+        }
+    }
+
     session()
