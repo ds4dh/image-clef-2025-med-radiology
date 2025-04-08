@@ -15,7 +15,7 @@ import json
 
 CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
 
-RUN_TAG = "2025-03-24_19-00-09_unige-poc"
+RUN_TAG = "2025-04-05_22-01-30_unige-poc"
 DEVICE_NAME = "cpu"
 
 RUN_DIR = os.path.join("./runs", RUN_TAG)
