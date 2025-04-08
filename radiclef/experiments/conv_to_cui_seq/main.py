@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Tuple
 import os
 import json
 
+EXP_DIR = os.path.join(os.path.dirname(__file__))
+
 CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
 if not os.path.exists(CUI_ALPHABET_PATH):
 
