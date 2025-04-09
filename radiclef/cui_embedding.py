@@ -13,7 +13,10 @@ import requests
 import os
 import json
 
-import matplotlib.pyplot as plt
+PRETRAINED_AND_ALIGNED_EMBEDDINGS_PATH = os.path.join(RESOURCES_DIR, "cui-embedding-500.pt")
+
+with open(os.path.join(RESOURCES_DIR, "cui-alphabet.txt")) as f:
+    ALPHABET = [_line.strip() for _line in f.readlines()][4:]
 
 
 def download_pretrained_embeddings(pretrained_embeddings_path) -> None:
@@ -100,24 +103,17 @@ def get_euclidian_similarity_matrix(matrix: torch.Tensor) -> torch.Tensor:
     return matrix @ matrix.t()
 
 
+if not os.path.exists(PRETRAINED_AND_ALIGNED_EMBEDDINGS_PATH):
+    the_pretrained_embeddings_path = os.path.join(CORPORA_DIR, "UMLS", "cui2vec_pretrained.csv")
+    if not os.path.exists(the_pretrained_embeddings_path):
+        download_pretrained_embeddings(the_pretrained_embeddings_path)
+
+    prepare_and_save_alphabet_aligned_pretrained_embeddings(the_pretrained_embeddings_path, ALPHABET)
+
+PRETRAINED_EMBEDDING_DICTIONARY = torch.load(PRETRAINED_AND_ALIGNED_EMBEDDINGS_PATH)
+embeddings = PRETRAINED_EMBEDDING_DICTIONARY["data"]
+
 if __name__ == "__main__":
-
-    with open(os.path.join(RESOURCES_DIR, "cui-alphabet.txt")) as f:
-        the_alphabet = [_line.strip() for _line in f.readlines()][4:]
-
-    the_aligned_dictionary_path = os.path.join(RESOURCES_DIR, "cui-embedding-500.pt")
-
-    if not os.path.exists(the_aligned_dictionary_path):
-        the_pretrained_embeddings_path = os.path.join(CORPORA_DIR, "UMLS", "cui2vec_pretrained.csv")
-        if not os.path.exists(the_pretrained_embeddings_path):
-            download_pretrained_embeddings(the_pretrained_embeddings_path)
-
-        prepare_and_save_alphabet_aligned_pretrained_embeddings(the_pretrained_embeddings_path, the_alphabet)
-
-    dictionary = torch.load(the_aligned_dictionary_path)
-    embeddings = dictionary["data"]
-
-    print(dictionary)
 
     RUN_TAG = "2025-04-02_08-13-36_unige-poc"
     embeddings_implicit = fetch_pretrained_implicit_embeddings(os.path.join(EXP_DIR, "runs", RUN_TAG))
@@ -126,7 +122,7 @@ if __name__ == "__main__":
     torch.save(
         {
             "data": embeddings_implicit,
-            "cui": the_alphabet
+            "cui": ALPHABET
         },
         os.path.join(RESOURCES_DIR, "cui-embedding-32-implicit.pt"))
 
@@ -137,7 +133,7 @@ if __name__ == "__main__":
 
     intersection = []
 
-    for idx in range(the_alphabet.__len__()):
+    for idx in range(ALPHABET.__len__()):
         top_items = set(sim[idx, :].topk(k=K).indices[1:].tolist())
         top_imp_items = set(sim_imp[idx, :].topk(k=K).indices[1:].tolist())
 
