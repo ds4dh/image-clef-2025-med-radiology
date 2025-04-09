@@ -76,6 +76,7 @@
       "dropout": 0.1
     },
     "sequence_generator": {
+      "use-pretrained-cui-embedding": true,
       "input_dim": 64,
       "hidden_dim": 32,
       "max_len": 32,

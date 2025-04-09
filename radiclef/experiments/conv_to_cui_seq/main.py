@@ -117,6 +117,19 @@ class TrainingSession(TrainingBaseSession):
     @staticmethod
     def init_network_functional(config_network: Dict) -> torch.nn.Module:
         network = ConvEmbeddingToSec(config_network)
+        if config_network["sequence_generator"].get("use-pretrained-cui-embedding"):
+            from radiclef.cui_embedding import PRETRAINED_EMBEDDING_DICTIONARY
+            if CUI_ALPHABET[4:] != PRETRAINED_EMBEDDING_DICTIONARY["cui"]:
+                raise RuntimeError("The alphabets do not match.")
+            embeddings: torch.Tensor = PRETRAINED_EMBEDDING_DICTIONARY["data"]
+            random_projection_matrix = torch.randn(embeddings.shape[1],
+                                                   config_network["sequence_generator"]["hidden_dim"])
+
+            embeddings = embeddings - embeddings.mean()
+            embeddings = embeddings @ random_projection_matrix
+            embeddings = embeddings / embeddings.std(dim=1).reshape(-1, 1).expand_as(embeddings)
+
+            network.seq_generator.token_embedding.weight.data[4:, :] = embeddings
 
         return network
 
