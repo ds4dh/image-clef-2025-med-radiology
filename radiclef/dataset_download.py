@@ -87,6 +87,7 @@ def create_dataset_from_split(
     dataset = datasets.Dataset.from_generator(
         generate_examples,
         features=datasets.Features({
+            "id": datasets.Value("string"),
             "image": datasets.features.Image(),
             "caption": datasets.Value("string"),
             "cui_codes": datasets.Sequence(datasets.Value("string"))
