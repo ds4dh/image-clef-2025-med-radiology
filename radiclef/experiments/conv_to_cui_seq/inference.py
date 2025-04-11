@@ -1,34 +1,43 @@
+import datasets
+import pandas as pd
+
 from radiclef import RESOURCES_DIR, ROCO_DATABASE_PATH
 from radiclef.utils import ConceptUniqueIdentifiers, ImagePrepare
 from radiclef.networks import ConvEmbeddingToSec
+from radiclef.umls_api import CONCEPT_MAP_PATH
+from radiclef.experiments.conv_to_cui_seq.main import F1Metric
 
 from torchbase.utils.networks import load_network_from_state_dict_to_device
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
-from datasets import Dataset, load_dataset, load_from_disk, DatasetDict
-
-from typing import Any, Dict, List, Tuple
+from datasets import load_from_disk
 
 import os
 import json
 
-CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
+RUN_TAG = "2025-04-09_07-29-28_unige-poc"
+DEVICE_NAME = "mps"
+BATCH_SIZE = 50
 
-RUN_TAG = "2025-04-05_22-01-30_unige-poc"
-DEVICE_NAME = "cpu"
+run_dir = os.path.join("./runs", RUN_TAG)
 
-RUN_DIR = os.path.join("./runs", RUN_TAG)
-
-with open(os.path.join(RUN_DIR, "config.json"), "r") as f:
+with open(os.path.join(run_dir, "config.json"), "r") as f:
     config = json.load(f)
+
+network = ConvEmbeddingToSec(config["network"])
+network = load_network_from_state_dict_to_device(network, os.path.join(run_dir, "network.pth"),
+                                                 device=torch.device(DEVICE_NAME))
 
 dataset_dict = load_from_disk(ROCO_DATABASE_PATH)
 
-with open(CUI_ALPHABET_PATH, "r") as f:
+with open(os.path.join(RESOURCES_DIR, "cui-alphabet.txt"), "r") as f:
     cui_alphabet = [v.strip() for v in f.readlines()]
 
-cui_object = ConceptUniqueIdentifiers(alphabet=cui_alphabet)
+with open(CONCEPT_MAP_PATH, "r") as f:
+    concept_map = json.load(f)
+
+cui_object = ConceptUniqueIdentifiers(alphabet=cui_alphabet, concept_map=concept_map)
 image_prep = ImagePrepare(standard_image_size=(1024, 1024),
                           standard_image_mode=config["data"]["image_mode"],
                           concatenate_positional_embedding=config["data"]["image_positional_embedding"])
@@ -44,27 +53,50 @@ def map_fields(example):
     }
 
 
-dataset = dataset_dict["train"]
-dataset.set_transform(lambda x: map_fields(x))
+def eval_dataset(dataset: datasets.Dataset) -> pd.DataFrame:
+    metric = F1Metric()
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False)
+    header = ["ground-truth-codes", "predicted-codes", "ground-truth-concepts", "predicted-concepts", "f1-score"]
+    data = []
+    idx_minibatch = -1
+    for mini_batch in dataloader:
+        idx_minibatch += 1
+        print("Processing batch {}/{}".format(idx_minibatch, len(dataloader)))
+        im_tensor = mini_batch["image_tensor"].to(torch.device(DEVICE_NAME))
+        ground_truth_seq = mini_batch["cui_seq"].to(torch.device(DEVICE_NAME))
 
-network = ConvEmbeddingToSec(config["network"])
+        prediction_seq = network.predict(im_tensor,
+                                         bos_token_idx=cui_object.c2i[cui_object.BOS_TOKEN],
+                                         eos_token_idx=cui_object.c2i[cui_object.EOS_TOKEN],
+                                         max_len=32)
 
-network = load_network_from_state_dict_to_device(network, os.path.join(RUN_DIR, "network.pth"),
-                                                 device=torch.device(DEVICE_NAME))
+        for idx in range(im_tensor.shape[0]):
+            _gt_seq = ground_truth_seq[idx, :]
+            _p_seq = prediction_seq[idx, :]
 
-sample = dataset[1029]
+            _data = [
+                cui_object.decode(_gt_seq.tolist()),
+                cui_object.decode(_p_seq.tolist()),
+                cui_object.decode_mapped(_gt_seq.tolist()),
+                cui_object.decode_mapped(_p_seq.tolist()),
+                metric.f1_score(ground_truth_seq=_gt_seq.unsqueeze(0), prediction_seq=_p_seq.unsqueeze(0))
+            ]
 
-im_tensor = sample["image_tensor"].to(torch.device(DEVICE_NAME)).unsqueeze(0)
-seq = sample["cui_seq"].to(torch.device(DEVICE_NAME)).unsqueeze(0)
+            data.append(_data)
 
-out = network(im_tensor, seq)
-logits = torch.nn.functional.softmax(out, dim=-1)
-
-gen = network.predict(im_tensor,
-                      bos_token_idx=cui_object.c2i[cui_object.BOS_TOKEN],
-                      eos_token_idx=cui_object.c2i[cui_object.EOS_TOKEN],
-                      max_len=20)
+    return pd.DataFrame(data=data, columns=header, index=None)
 
 
-print(seq)
-print(gen)
+if __name__ == "__main__":
+    outputs = {}
+    for split in ["test", "valid", "train"]:
+        print(split)
+        ds = dataset_dict[split]
+        image_ids = ds["id"]
+        ds.set_transform(lambda x: map_fields(x))
+        df = eval_dataset(ds)
+        df.insert(0, 'image-ID', pd.Series(image_ids))
+        df_path = os.path.join(run_dir, "inference-{}_f1-score-{}.csv".format(
+            split, df["f1-score"].mean().item()))
+
+        df.to_csv(df_path, index=False)
