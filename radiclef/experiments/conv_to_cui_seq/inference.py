@@ -17,7 +17,7 @@ import os
 import json
 
 RUN_TAG = "2025-04-09_07-29-28_unige-poc"
-DEVICE_NAME = "mps"
+DEVICE_NAME = "cuda:0"
 BATCH_SIZE = 50
 
 run_dir = os.path.join("./runs", RUN_TAG)
