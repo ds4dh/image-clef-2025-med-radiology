@@ -17,7 +17,18 @@ class ConceptUniqueIdentifiers:
     BOS_TOKEN = "<BOS>"
     EOS_TOKEN = "<EOS>"
 
-    def __init__(self, alphabet: List[str] | None = None):
+    def __init__(self, alphabet: List[str] | None = None, concept_map: Dict[str, str] | None = None):
+        # TODO: Add tests for concept_map
+        if concept_map is not None:
+            if not isinstance(concept_map, dict):
+                raise TypeError
+            concept_map[self.PAD_TOKEN] = self.PAD_TOKEN
+            concept_map[self.OOV_TOKEN] = self.OOV_TOKEN
+            concept_map[self.BOS_TOKEN] = self.BOS_TOKEN
+            concept_map[self.EOS_TOKEN] = self.EOS_TOKEN
+
+        self.concept_map = concept_map
+
         if alphabet is None:
             self.alphabet: List[str] = [self.PAD_TOKEN, self.OOV_TOKEN, self.BOS_TOKEN, self.EOS_TOKEN]
         else:
@@ -26,11 +37,21 @@ class ConceptUniqueIdentifiers:
         self.c2i = self.get_token_to_integer_mapping()
         self.i2c = self.get_integer_to_token_mapping()
 
+        if self.concept_map is not None:
+            for vocab in self.alphabet:
+                if vocab not in concept_map.keys():
+                    raise RuntimeError("{} not existing in the provided concept mapping.".format(vocab))
+
     def _check_and_get_alphabet(self, alphabet: List[str]) -> List[str]:
         if not isinstance(alphabet, list) or not all(isinstance(element, str) for element in alphabet):
             raise TypeError("Alphabet must be a list of strings.")
 
         alphabet = self.get_alphabet(alphabet)
+        if self.concept_map is not None:
+            for vocab in alphabet:
+                if vocab not in self.concept_map.keys():
+                    raise RuntimeError(
+                        "{} exists in the vocabulary, but not in the provided concept mapping.".format(vocab))
 
         return alphabet
 
@@ -73,6 +94,15 @@ class ConceptUniqueIdentifiers:
         seq_decoded = [self.i2c[item] for item in seq]
 
         return seq_decoded
+
+    def decode_mapped(self, seq: List[int]) -> List[str]:
+        if self.concept_map is None:
+            raise RuntimeError
+
+        seq_decoded = self.decode(seq)
+        seq_mapped = [self.concept_map[code] for code in seq_decoded]
+
+        return seq_mapped
 
 
 class ImagePrepare:
