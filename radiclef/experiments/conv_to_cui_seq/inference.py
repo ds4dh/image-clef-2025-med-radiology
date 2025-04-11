@@ -29,6 +29,8 @@ network = ConvEmbeddingToSec(config["network"])
 network = load_network_from_state_dict_to_device(network, os.path.join(run_dir, "network.pth"),
                                                  device=torch.device(DEVICE_NAME))
 
+network = network.eval()
+
 dataset_dict = load_from_disk(ROCO_DATABASE_PATH)
 
 with open(os.path.join(RESOURCES_DIR, "cui-alphabet.txt"), "r") as f:
@@ -65,10 +67,11 @@ def eval_dataset(dataset: datasets.Dataset) -> pd.DataFrame:
         im_tensor = mini_batch["image_tensor"].to(torch.device(DEVICE_NAME))
         ground_truth_seq = mini_batch["cui_seq"].to(torch.device(DEVICE_NAME))
 
-        prediction_seq = network.predict(im_tensor,
-                                         bos_token_idx=cui_object.c2i[cui_object.BOS_TOKEN],
-                                         eos_token_idx=cui_object.c2i[cui_object.EOS_TOKEN],
-                                         max_len=32)
+        with torch.no_grad():
+            prediction_seq = network.predict(im_tensor,
+                                             bos_token_idx=cui_object.c2i[cui_object.BOS_TOKEN],
+                                             eos_token_idx=cui_object.c2i[cui_object.EOS_TOKEN],
+                                             max_len=32)
 
         for idx in range(im_tensor.shape[0]):
             _gt_seq = ground_truth_seq[idx, :]
