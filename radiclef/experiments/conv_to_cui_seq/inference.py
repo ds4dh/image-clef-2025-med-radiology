@@ -19,6 +19,7 @@ import json
 RUN_TAG = "2025-04-09_07-29-28_unige-poc"
 DEVICE_NAME = "cuda:0"
 BATCH_SIZE = 50
+BEAM_SEARCH_WIDTH: None | int = 3
 
 run_dir = os.path.join("./runs", RUN_TAG)
 
@@ -40,7 +41,7 @@ with open(CONCEPT_MAP_PATH, "r") as f:
     concept_map = json.load(f)
 
 cui_object = ConceptUniqueIdentifiers(alphabet=cui_alphabet, concept_map=concept_map)
-image_prep = ImagePrepare(standard_image_size=(1024, 1024),
+image_prep = ImagePrepare(standard_image_size=(config["data"]["image_size"][0], config["data"]["image_size"][1]),
                           standard_image_mode=config["data"]["image_mode"],
                           concatenate_positional_embedding=config["data"]["image_positional_embedding"])
 
@@ -63,7 +64,7 @@ def eval_dataset(dataset: datasets.Dataset) -> pd.DataFrame:
     idx_minibatch = -1
     for mini_batch in dataloader:
         idx_minibatch += 1
-        print("Processing batch {}/{}".format(idx_minibatch, len(dataloader)))
+        print("Processing batch {}/{}".format(idx_minibatch + 1, len(dataloader)))
         im_tensor = mini_batch["image_tensor"].to(torch.device(DEVICE_NAME))
         ground_truth_seq = mini_batch["cui_seq"].to(torch.device(DEVICE_NAME))
 
@@ -71,7 +72,8 @@ def eval_dataset(dataset: datasets.Dataset) -> pd.DataFrame:
             prediction_seq = network.predict(im_tensor,
                                              bos_token_idx=cui_object.c2i[cui_object.BOS_TOKEN],
                                              eos_token_idx=cui_object.c2i[cui_object.EOS_TOKEN],
-                                             max_len=32)
+                                             max_len=32,
+                                             beam_search_width=BEAM_SEARCH_WIDTH)
 
         for idx in range(im_tensor.shape[0]):
             _gt_seq = ground_truth_seq[idx, :]
@@ -93,7 +95,7 @@ def eval_dataset(dataset: datasets.Dataset) -> pd.DataFrame:
 if __name__ == "__main__":
     outputs = {}
     for split in ["test", "valid", "train"]:
-        print(split)
+        print("Processing {} split .. ".format(split))
         ds = dataset_dict[split]
         image_ids = ds["id"]
         ds.set_transform(lambda x: map_fields(x))
