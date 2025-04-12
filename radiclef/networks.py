@@ -156,7 +156,7 @@ class TransformerSeqGen(nn.Module):
         return logits
 
     @torch.no_grad()
-    def generate(self, input_vector, bos_token_idx, eos_token_idx, max_len=20):
+    def generate_greedy(self, input_vector, bos_token_idx, eos_token_idx, max_len=20):
 
         device = input_vector.device
         b = input_vector.size(0)
@@ -186,6 +186,74 @@ class TransformerSeqGen(nn.Module):
 
         return input_ids
 
+    @torch.no_grad()
+    def generate_beam_search(self, input_vector, bos_token_idx, eos_token_idx, max_len=20, beam_width=3):
+
+        device = input_vector.device
+        b = input_vector.size(0)
+        memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
+
+        # Initialize beams: List of lists of (seq, score) tuples per batch item
+        beams = [[(torch.full((1, 1), bos_token_idx, dtype=torch.long, device=device), 0.0)] for _ in range(b)]
+
+        finished = [[] for _ in range(b)]  # For storing finished beams (hit EOS)
+
+        for _ in range(max_len):
+            new_beams = []
+
+            for i in range(b):
+                candidates = []
+                for seq, score in beams[i]:
+                    if seq[0, -1].item() == eos_token_idx:
+                        finished[i].append((seq, score))
+                        candidates.append((seq, score))
+                        continue
+
+                    l = seq.size(1)
+                    tgt = self.token_embedding(seq)
+                    pos_ids = torch.arange(l, device=device).unsqueeze(0)
+                    tgt = tgt + self.pos_embedding(pos_ids)
+
+                    tgt_mask = torch.triu(torch.ones(l, l, device=device), diagonal=1).bool()
+                    mem = memory[i: i + 1]  # (1, 1, d_model)
+
+                    out = self.decoder(tgt=tgt, memory=mem, tgt_mask=tgt_mask)
+                    logits = self.output_proj(out)
+                    log_probs = F.log_softmax(logits[:, -1, :], dim=-1)
+
+                    topk_log_probs, topk_tokens = torch.topk(log_probs, beam_width)
+
+                    for j in range(beam_width):
+                        next_token = topk_tokens[0, j].unsqueeze(0).unsqueeze(0)  # (1, 1)
+                        new_seq = torch.cat([seq, next_token], dim=1)
+                        new_score = score + topk_log_probs[0, j].item()
+                        candidates.append((new_seq, new_score))
+
+                # Select top-k candidates for next round
+                sorted_candidates = sorted(candidates, key=lambda x: x[1], reverse=True)
+                new_beams.append(sorted_candidates[:beam_width])
+
+            beams = new_beams
+
+            if all(len(f) >= beam_width for f in finished):
+                break
+
+        # Finalize output
+        output_sequences = []
+        for i in range(b):
+            final_candidates = finished[i] if finished[i] else beams[i]
+            best_seq = sorted(final_candidates, key=lambda x: x[1], reverse=True)[0][0]
+            output_sequences.append(best_seq)
+
+        # Pad sequences to same length
+        max_out_len = max(seq.size(1) for seq in output_sequences)
+        output_tensor = torch.full((b, max_out_len), eos_token_idx, dtype=torch.long, device=device)
+
+        for i, seq in enumerate(output_sequences):
+            output_tensor[i, :seq.size(1)] = seq[0]
+
+        return output_tensor
+
 
 class ConvEmbeddingToSec(torch.nn.Module):
     def __init__(self, config):
@@ -203,12 +271,22 @@ class ConvEmbeddingToSec(torch.nn.Module):
         return seq
 
     @torch.no_grad()
-    def predict(self, image, bos_token_idx, eos_token_idx, max_len=50):
+    def predict(self, image, bos_token_idx, eos_token_idx, max_len=50, beam_search_width: None | int = None):
         b, _, _, _ = image.shape
         emb = (self.conv_embedding(image))
         emb = emb.reshape(b, -1)
 
-        return self.seq_generator.generate(emb,
-                                           bos_token_idx=bos_token_idx,
-                                           eos_token_idx=eos_token_idx,
-                                           max_len=max_len)
+        if beam_search_width is None:
+            seq = self.seq_generator.generate(emb,
+                                              bos_token_idx=bos_token_idx,
+                                              eos_token_idx=eos_token_idx,
+                                              max_len=max_len)
+
+        else:
+            seq = self.seq_generator.generate_beam_search(emb,
+                                                          bos_token_idx=bos_token_idx,
+                                                          eos_token_idx=eos_token_idx,
+                                                          max_len=max_len,
+                                                          beam_width=beam_search_width)
+
+        return seq
