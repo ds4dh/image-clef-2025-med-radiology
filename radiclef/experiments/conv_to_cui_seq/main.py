@@ -152,7 +152,14 @@ class TrainingSession(TrainingBaseSession):
         return {"target_seq": target_seq, "output": output, "prediction_seq": output.argmax(dim=-1)}
 
     def loss_function(self, *, output: torch.Tensor, target_seq: torch.Tensor) -> torch.Tensor:
-        criterion = torch.nn.CrossEntropyLoss(ignore_index=self.cui_object.c2i[self.cui_object.PAD_TOKEN])
+        token_weights = torch.ones(len(self.cui_object.alphabet))
+        if self.config_session.loss_function_params is not None:
+            eos_token_weight = self.config_session.loss_function_params.get("eos_token_weight")
+            eos_index = self.cui_object.c2i[self.cui_object.EOS_TOKEN]
+            token_weights[eos_index] = eos_token_weight
+
+        criterion = torch.nn.CrossEntropyLoss(ignore_index=self.cui_object.c2i[self.cui_object.PAD_TOKEN],
+                                              weight=token_weights.to(self.device))
 
         loss = criterion(output.transpose(-2, -1), target_seq)
 

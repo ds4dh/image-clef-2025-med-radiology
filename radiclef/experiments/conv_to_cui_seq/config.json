@@ -6,7 +6,10 @@
     "learning_rate": 0.003,
     "weight_decay": 1e-5,
     "dataloader_num_workers": 8,
-    "tag_postfix": null
+    "tag_postfix": null,
+    "loss_function_params": {
+      "eos_token_weight": 0.25
+    }
   },
   "data": {
     "image_size": [
