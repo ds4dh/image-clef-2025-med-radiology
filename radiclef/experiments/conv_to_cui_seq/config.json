@@ -1,8 +1,8 @@
 {
   "session": {
-    "device_name": "cuda:0",
+    "device_name": "cuda:1",
     "num_epochs": 500,
-    "mini_batch_size": 86,
+    "mini_batch_size": 256,
     "learning_rate": 0.003,
     "weight_decay": 1e-5,
     "dataloader_num_workers": 8,
@@ -10,8 +10,8 @@
   },
   "data": {
     "image_size": [
-      1024,
-      1024
+      512,
+      512
     ],
     "image_positional_embedding": true,
     "image_mode": "RGB",
@@ -68,8 +68,8 @@
       "channels_list": [
         5,
         8,
-        8,
-        8,
+        16,
+        16,
         16
       ],
       "num_out_channels": 1,
@@ -77,12 +77,12 @@
     },
     "sequence_generator": {
       "use-pretrained-cui-embedding": true,
-      "input_dim": 64,
-      "hidden_dim": 32,
+      "input_dim": 16,
+      "hidden_dim": 16,
       "max_len": 32,
       "num_layers": 2,
       "num_heads": 1,
-      "dim_feedforward": 32,
+      "dim_feedforward": 16,
       "dropout": 0.1
     }
   }
