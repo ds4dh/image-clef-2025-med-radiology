@@ -239,4 +239,5 @@ if __name__ == "__main__":
         }
     }
 
+    session.add_writer_custom_scalar_logging_layout(layout_dict)
     session()
