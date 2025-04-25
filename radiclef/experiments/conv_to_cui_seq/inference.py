@@ -72,7 +72,7 @@ def map_fields(example):
 
 def eval_dataset(dataset: datasets.Dataset) -> pd.DataFrame:
     is_metadata_available: bool
-    if "cui" in dataset.column_names:
+    if "cui_codes" in dataset.column_names:
         is_metadata_available = True
         header = ["ground-truth-codes", "predicted-codes", "ground-truth-concepts", "predicted-concepts", "f1-score"]
     else:
