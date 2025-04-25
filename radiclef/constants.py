@@ -18,5 +18,6 @@ else:
     raise ValueError("The root data directory not assigned for the hostname.")
 
 ROCO_DATABASE_PATH = os.path.join(CORPORA_DIR, "ROCOv2-radiology")
+CLEF_2025_DATABASE_PATH = os.path.join(CORPORA_DIR, "CLEF-2025-radiology")
 
 RESOURCES_DIR = os.path.join(REPO_DIR, "resources")

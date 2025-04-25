@@ -1,15 +1,16 @@
 import requests
-from radiclef import CORPORA_DIR, ROCO_DATABASE_PATH
+from radiclef import ROCO_DATABASE_PATH, CLEF_2025_DATABASE_PATH
 
 import os
 import zipfile
-from typing import Dict, List
+from typing import List
 
 import pandas as pd
 import datasets
 
-ZENODO_API_URL = "https://zenodo.org/api/records/10821435"
-RAW_DOWNLOAD_DIR = os.path.join(CORPORA_DIR, "zenodo")
+ROCO_API_URL_FROM_ZENODO = "https://zenodo.org/api/records/10821435"
+RAW_ROCO_DOWNLOAD_DIR = os.path.join(ROCO_DATABASE_PATH, "zenodo")
+RAW_CLEF_ZIP_FILE_PATH = os.path.join(CLEF_2025_DATABASE_PATH, "raw.zip")
 
 IMAGES_TRAIN_NAME = 'train_images.zip'
 IMAGES_VALID_NAME = 'valid_images.zip'
@@ -31,12 +32,12 @@ def download_from_zenodo(zenodo_url: str) -> None:
     data = response.json()
     files = data.get("files", [])
 
-    os.makedirs(RAW_DOWNLOAD_DIR, exist_ok=True)
+    os.makedirs(RAW_ROCO_DOWNLOAD_DIR, exist_ok=True)
 
     for file in files:
         file_url = file["links"]["self"] + "?download=1"  # Ensure proper download URL
         file_name = file["key"]
-        file_path = os.path.join(RAW_DOWNLOAD_DIR, file_name)
+        file_path = os.path.join(RAW_ROCO_DOWNLOAD_DIR, file_name)
         if not os.path.exists(file_path):
             print(f"Downloading {file_name}...")
             file_response = requests.get(file_url, stream=True)
@@ -63,36 +64,54 @@ def process_cui_column(cui_series: pd.Series) -> List[List[str]]:
 def create_dataset_from_split(
         image_dir: str, captions_file: str, concepts_file: str
 ) -> datasets.Dataset:
-    captions_df = load_dataframe(captions_file)
-    concepts_df = load_dataframe(concepts_file)
+    is_metadata_available: bool
+    if os.path.exists(captions_file) and os.path.exists(concepts_file):
+        is_metadata_available = True
+        captions_df = load_dataframe(captions_file)
+        concepts_df = load_dataframe(concepts_file)
 
-    merged_df = captions_df.merge(concepts_df, on="ID", how="inner")
+        meta_df = captions_df.merge(concepts_df, on="ID", how="inner")
 
-    merged_df["CUIs"] = process_cui_column(merged_df["CUIs"])
+        meta_df["CUIs"] = process_cui_column(meta_df["CUIs"])
+    else:
+        is_metadata_available = False
+        meta_df = pd.DataFrame(data=[_path.split(".")[0] for _path in os.listdir(image_dir) if _path.endswith(".jpg")],
+                               columns=["ID"])
 
     def generate_examples():
-        for _, row in merged_df.iterrows():
+        for _, row in meta_df.iterrows():
             image_path = os.path.join(image_dir, f"{row['ID']}.jpg")
             if not os.path.exists(image_path):
                 continue
             with open(image_path, "rb") as img_file:
                 image_bytes = img_file.read()
-            yield {
-                "id": row["ID"],
-                "image": image_bytes,
-                "caption": row["Caption"],
-                "cui_codes": row["CUIs"],
-            }
+                yield_dict = {
+                    "id": row["ID"],
+                    "image": image_bytes,
+                }
 
-    dataset = datasets.Dataset.from_generator(
-        generate_examples,
-        features=datasets.Features({
-            "id": datasets.Value("string"),
-            "image": datasets.features.Image(),
+                if is_metadata_available:
+                    yield_dict = {**yield_dict, **{
+                        "caption": row["Caption"],
+                        "cui_codes": row["CUIs"],
+                    }}
+
+            yield yield_dict
+
+    features_dict = {
+        "id": datasets.Value("string"),
+        "image": datasets.features.Image()
+    }
+    if is_metadata_available:
+        features_dict = {**features_dict, **{
             "caption": datasets.Value("string"),
             "cui_codes": datasets.Sequence(datasets.Value("string"))
-        })
+        }}
+    dataset = datasets.Dataset.from_generator(
+        generate_examples,
+        features=datasets.Features(features_dict)
     )
+
     return dataset
 
 
@@ -129,10 +148,43 @@ def build_dataset_dict(data_root: str) -> datasets.DatasetDict:
     return datasets.DatasetDict(dataset_splits)
 
 
-if __name__ == "__main__":
+def main_roco():
     if not os.path.exists(os.path.join(ROCO_DATABASE_PATH, "dataset_dict.json")):
-        if not os.path.exists(RAW_DOWNLOAD_DIR):
-            download_from_zenodo(ZENODO_API_URL)
+        if not os.path.exists(RAW_ROCO_DOWNLOAD_DIR):
+            download_from_zenodo(ROCO_API_URL_FROM_ZENODO)
 
-        dataset_dict = build_dataset_dict(RAW_DOWNLOAD_DIR)
+        dataset_dict = build_dataset_dict(RAW_ROCO_DOWNLOAD_DIR)
         dataset_dict.save_to_disk(ROCO_DATABASE_PATH)
+
+
+def check_validity_of_clef_database():
+    raw_dir = os.path.join(os.path.dirname(RAW_CLEF_ZIP_FILE_PATH), "raw")
+    list_of_necessary_items = ["train_captions.csv", "train_concepts.csv",
+                               "valid_captions.csv", "valid_concepts.csv",
+                               "train", "valid", "test"]
+
+    for _name in list_of_necessary_items:
+        _path = os.path.join(raw_dir, _name)
+        if not os.path.exists(_path):
+            raise FileNotFoundError("You should manually organize the data as such.")
+
+
+def main_clef():
+    if not os.path.exists(os.path.join(CLEF_2025_DATABASE_PATH, "dataset_dict.json")):
+        if not os.path.exists(RAW_CLEF_ZIP_FILE_PATH):
+            raise FileNotFoundError(
+                "You need to download the raw data from the challenge's website and do some manual preparations first.")
+
+        with zipfile.ZipFile(RAW_CLEF_ZIP_FILE_PATH, 'r') as zip_ref:
+            zip_ref.extractall(os.path.dirname(RAW_CLEF_ZIP_FILE_PATH))
+
+        check_validity_of_clef_database()
+        os.remove(RAW_CLEF_ZIP_FILE_PATH)
+
+        dataset_dict = build_dataset_dict(os.path.join(os.path.dirname(RAW_CLEF_ZIP_FILE_PATH), "raw"))
+        dataset_dict.save_to_disk(CLEF_2025_DATABASE_PATH)
+
+
+if __name__ == "__main__":
+    main_roco()
+    main_clef()
