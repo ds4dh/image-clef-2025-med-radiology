@@ -77,6 +77,10 @@ def create_dataset_from_split(
         is_metadata_available = False
         meta_df = pd.DataFrame(data=[_path.split(".")[0] for _path in os.listdir(image_dir) if _path.endswith(".jpg")],
                                columns=["ID"])
+        meta_df = meta_df.sort_values(
+            by="ID",
+            key=lambda x: x.apply(lambda val: val.split("_")[-1].zfill(5))
+        )
 
     def generate_examples():
         for _, row in meta_df.iterrows():
