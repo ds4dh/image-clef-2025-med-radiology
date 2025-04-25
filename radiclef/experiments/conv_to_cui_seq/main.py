@@ -1,4 +1,4 @@
-from radiclef import RESOURCES_DIR, ROCO_DATABASE_PATH
+from radiclef import RESOURCES_DIR, CLEF_2025_DATABASE_PATH
 from radiclef.utils import ConceptUniqueIdentifiers, ImagePrepare, ImageAugment
 from radiclef.networks import ConvEmbeddingToSec
 
@@ -21,7 +21,7 @@ EXP_DIR = os.path.join(os.path.dirname(__file__))
 CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
 if not os.path.exists(CUI_ALPHABET_PATH):
 
-    dataset = load_from_disk(ROCO_DATABASE_PATH)["train"]
+    dataset = load_from_disk(CLEF_2025_DATABASE_PATH)["train"]
     dataset = dataset.remove_columns([col for col in dataset.features if col != "cui_codes"])
     cui_obj = ConceptUniqueIdentifiers()
 
@@ -67,7 +67,7 @@ class TrainingSession(TrainingBaseSession):
     @staticmethod
     def init_datasets_functional(config_data: Dict) -> Tuple[Dataset, ValidationDatasetsDict]:
 
-        dataset_dict = load_from_disk(ROCO_DATABASE_PATH)
+        dataset_dict = load_from_disk(CLEF_2025_DATABASE_PATH)
         image_height, image_width = config_data["image_size"]
         image_prep = ImagePrepare(standard_image_size=(image_height, image_width),
                                   standard_image_mode=config_data["image_mode"],
