@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from collections import namedtuple
-from typing import Tuple
+from typing import Tuple, List
 
 from math import log2, comb, gcd, prod
 
@@ -70,9 +70,11 @@ class ConvEmbedding(nn.Module):
     def __init__(self, init_dict):
         super(ConvEmbedding, self).__init__()
 
-        self.r_list = init_dict["sampling_ratio_list"]
-        self.c_list = init_dict["channels_list"]
-        self.c_o = init_dict["num_out_channels"]
+        self.r_list: List[int] = init_dict["sampling_ratio_list"]
+        self.c_list: List[int] = init_dict["channels_list"]
+        self.c_o: int = init_dict["num_out_channels"]
+        self.f: int = init_dict["proj_filter_size"]
+
 
         self.dropout = init_dict["dropout"]
         self.num_blocks = len(self.r_list)
@@ -88,6 +90,13 @@ class ConvEmbedding(nn.Module):
                 DownConvBlockExternal(self.c_list[i_b], self.c_list[-1], prod(self.r_list[i_b:])))
 
         self.conv_channel = nn.Conv2d(self.c_list[-1] * (self.num_blocks + 1), self.c_o, kernel_size=1)
+        self.proj = nn.Conv2d(self.c_o, self.c_o, kernel_size=self.f, stride=self.f // 4, padding=(self.f - 1) // 2)
+
+        self._freeze_layers()
+
+    def _freeze_layers(self):
+        for param in self.proj.parameters():
+            param.requires_grad = False
 
     def forward(self, inp):
 
@@ -101,6 +110,7 @@ class ConvEmbedding(nn.Module):
 
         res = torch.cat((res, inp), 1)
         out = self.conv_channel(res)
+        out = self.proj(out)
 
         return out
 
