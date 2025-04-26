@@ -119,7 +119,6 @@ class TransformerSeqGen(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        input_dim = config["input_dim"]
         hidden_dim = config["hidden_dim"]
         vocab_size = config["vocab_size"]
         max_len = config["max_len"]
@@ -130,8 +129,6 @@ class TransformerSeqGen(nn.Module):
 
         self.token_embedding = nn.Embedding(vocab_size, hidden_dim)
         self.pos_embedding = nn.Embedding(max_len, hidden_dim)
-
-        self.vector_proj = nn.Linear(input_dim, hidden_dim)
 
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=hidden_dim,
@@ -144,9 +141,9 @@ class TransformerSeqGen(nn.Module):
 
         self.output_proj = nn.Linear(hidden_dim, vocab_size)
 
-    def forward(self, input_vector, target_ids):
+    def forward(self, input_embedding_seq, target_ids):
         """
-        vector: (b, input_dim)
+        embedding seq: (b, c, input_dim)
         target_ids: (b, l) - token indices
         """
         b, l = target_ids.size()
@@ -156,11 +153,9 @@ class TransformerSeqGen(nn.Module):
         pos_emb = self.pos_embedding(pos_ids)
         tgt = token_emb + pos_emb  # (b, l, d_model)
 
-        memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
-
         tgt_mask = torch.triu(torch.ones(l, l, device=target_ids.device), diagonal=1).bool()
 
-        output = self.decoder(tgt=tgt, memory=memory, tgt_mask=tgt_mask)
+        output = self.decoder(tgt=tgt, memory=input_embedding_seq, tgt_mask=tgt_mask)
 
         logits = self.output_proj(output)
         return logits
@@ -272,10 +267,10 @@ class ConvEmbeddingToSec(torch.nn.Module):
         self.seq_generator = TransformerSeqGen(config["sequence_generator"])
 
     def forward(self, image, seq):
-        b, _, _, _ = image.shape
-
         emb = (self.conv_embedding(image))
-        emb = emb.reshape(b, -1)
+        b, l_emb, _, _ = emb.shape
+        emb = emb.reshape(b, l_emb, -1)
+
         seq = self.seq_generator(emb, seq)
 
         return seq

@@ -81,7 +81,6 @@
     },
     "sequence_generator": {
       "use-pretrained-cui-embedding": false,
-      "input_dim": 16,
       "hidden_dim": 16,
       "max_len": 32,
       "num_layers": 2,
