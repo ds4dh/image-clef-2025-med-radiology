@@ -13,13 +13,14 @@ import requests
 import os
 import json
 
-PRETRAINED_AND_ALIGNED_EMBEDDINGS_PATH = os.path.join(RESOURCES_DIR, "cui-embedding-500.pt")
+CUI2VEC_PRETRAINED_EMBEDDINGS_PATH = os.path.join(RESOURCES_DIR, "cui-embedding-500.pt")
+MED_CPT_PRETRAINED_EMBEDDINGS_PATH = os.path.join(RESOURCES_DIR, "med-cpt_cui-embeddings.pt")
 
 with open(os.path.join(RESOURCES_DIR, "cui-alphabet.txt")) as f:
     ALPHABET = [_line.strip() for _line in f.readlines()][4:]
 
 
-def download_pretrained_embeddings(pretrained_embeddings_path) -> None:
+def download_pretrained_embeddings_from_cui2vec(pretrained_embeddings_path) -> None:
     os.makedirs(os.path.dirname(pretrained_embeddings_path), exist_ok=True)
 
     url = "https://figshare.com/ndownloader/files/10959626?private_link=00d69861786cd0156d81"
@@ -40,8 +41,8 @@ def download_pretrained_embeddings(pretrained_embeddings_path) -> None:
     os.remove(zip_path)
 
 
-def prepare_and_save_alphabet_aligned_pretrained_embeddings(pretrained_embeddings_path: str,
-                                                            alphabet: List[str]) -> None:
+def prepare_and_save_alphabet_aligned_pretrained_embeddings_from_cui2vec(pretrained_embeddings_path: str,
+                                                                         alphabet: List[str]) -> None:
     alphabet_embedding_dict: Dict[str, List[float] | None] = {vocab: None for vocab in alphabet}
     with (open(pretrained_embeddings_path, "r") as f):
         for line in f:
@@ -103,19 +104,21 @@ def get_euclidian_similarity_matrix(matrix: torch.Tensor) -> torch.Tensor:
     return matrix @ matrix.t()
 
 
-if not os.path.exists(PRETRAINED_AND_ALIGNED_EMBEDDINGS_PATH):
-    the_pretrained_embeddings_path = os.path.join(CORPORA_DIR, "UMLS", "cui2vec_pretrained.csv")
-    if not os.path.exists(the_pretrained_embeddings_path):
-        download_pretrained_embeddings(the_pretrained_embeddings_path)
+def main_cui2vec():
+    if not os.path.exists(CUI2VEC_PRETRAINED_EMBEDDINGS_PATH):
+        the_pretrained_embeddings_path = os.path.join(CORPORA_DIR, "UMLS", "cui2vec_pretrained.csv")
+        if not os.path.exists(the_pretrained_embeddings_path):
+            download_pretrained_embeddings_from_cui2vec(the_pretrained_embeddings_path)
 
-    prepare_and_save_alphabet_aligned_pretrained_embeddings(the_pretrained_embeddings_path, ALPHABET)
+        prepare_and_save_alphabet_aligned_pretrained_embeddings_from_cui2vec(the_pretrained_embeddings_path, ALPHABET)
 
-PRETRAINED_EMBEDDING_DICTIONARY = torch.load(PRETRAINED_AND_ALIGNED_EMBEDDINGS_PATH)
-embeddings = PRETRAINED_EMBEDDING_DICTIONARY["data"]
 
 if __name__ == "__main__":
+    main_cui2vec()
+    PRETRAINED_EMBEDDING_DICTIONARY_CUI2VEC = torch.load(CUI2VEC_PRETRAINED_EMBEDDINGS_PATH)
+    embeddings = PRETRAINED_EMBEDDING_DICTIONARY_CUI2VEC["data"]
 
-    RUN_TAG = "2025-04-02_08-13-36_unige-poc"
+    RUN_TAG = "<a run tag that has an up-to-date alphabet>"
     embeddings_implicit = fetch_pretrained_implicit_embeddings(os.path.join(EXP_DIR, "runs", RUN_TAG))
     embeddings_implicit = embeddings_implicit[4:, :]
 
