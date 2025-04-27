@@ -274,9 +274,9 @@ class ConvEmbeddingToSec(torch.nn.Module):
 
     @torch.no_grad()
     def predict(self, image, bos_token_idx, eos_token_idx, max_len=50, beam_search_width: None | int = None):
-        b, _, _, _ = image.shape
         emb = (self.conv_embedding(image))
-        emb = emb.reshape(b, -1)
+        b, l_emb, _, _ = emb.shape
+        emb = emb.reshape(b, l_emb, -1)
 
         if beam_search_width is None:
             seq = self.seq_generator.generate(emb,
