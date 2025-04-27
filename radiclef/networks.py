@@ -161,10 +161,10 @@ class TransformerSeqGen(nn.Module):
         return logits
 
     @torch.no_grad()
-    def generate_greedy(self, input_vector, bos_token_idx, eos_token_idx, max_len=20):
+    def generate_greedy(self, input_embed_seq, bos_token_idx, eos_token_idx, max_len=20):
 
-        device = input_vector.device
-        b = input_vector.size(0)
+        device = input_embed_seq.device
+        b = input_embed_seq.size(0)
 
         input_ids = torch.full((b, 1), bos_token_idx, dtype=torch.long, device=device)
 
@@ -175,10 +175,9 @@ class TransformerSeqGen(nn.Module):
             pos_ids = torch.arange(l, device=device).unsqueeze(0).expand(b, l)
             tgt = tgt + self.pos_embedding(pos_ids)
 
-            memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
             tgt_mask = torch.triu(torch.ones(l, l, device=device), diagonal=1).bool()
 
-            output = self.decoder(tgt=tgt, memory=memory, tgt_mask=tgt_mask)
+            output = self.decoder(tgt=tgt, memory=input_embed_seq, tgt_mask=tgt_mask)
             logits = self.output_proj(output)  # (b, l, vocab_size)
 
             next_token_logits = logits[:, -1, :]  # (b, vocab_size)
@@ -192,11 +191,10 @@ class TransformerSeqGen(nn.Module):
         return input_ids
 
     @torch.no_grad()
-    def generate_beam_search(self, input_vector, bos_token_idx, eos_token_idx, max_len=20, beam_width=3):
+    def generate_beam_search(self, input_embed_seq, bos_token_idx, eos_token_idx, max_len=20, beam_width=3):
 
-        device = input_vector.device
-        b = input_vector.size(0)
-        memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
+        device = input_embed_seq.device
+        b = input_embed_seq.size(0)
 
         # Initialize beams: List of lists of (seq, score) tuples per batch item
         beams = [[(torch.full((1, 1), bos_token_idx, dtype=torch.long, device=device), 0.0)] for _ in range(b)]
@@ -220,9 +218,8 @@ class TransformerSeqGen(nn.Module):
                     tgt = tgt + self.pos_embedding(pos_ids)
 
                     tgt_mask = torch.triu(torch.ones(l, l, device=device), diagonal=1).bool()
-                    mem = memory[i: i + 1]  # (1, 1, d_model)
 
-                    out = self.decoder(tgt=tgt, memory=mem, tgt_mask=tgt_mask)
+                    out = self.decoder(tgt=tgt, memory=input_embed_seq[i: i + 1], tgt_mask=tgt_mask)
                     logits = self.output_proj(out)
                     log_probs = F.log_softmax(logits[:, -1, :], dim=-1)
 
