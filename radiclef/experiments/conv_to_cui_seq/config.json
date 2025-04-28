@@ -64,8 +64,8 @@
     "convolutional_embedding": {
       "sampling_ratio_list": [
         2,
-        4,
-        4,
+        2,
+        2,
         4
       ],
       "channels_list": [
@@ -75,12 +75,12 @@
         16,
         16
       ],
-      "num_out_channels": 1,
+      "num_out_channels": 4,
+      "proj_filter_size": 16,
       "dropout": 0.1
     },
     "sequence_generator": {
-      "use-pretrained-cui-embedding": true,
-      "input_dim": 16,
+      "use-pretrained-cui-embedding": false,
       "hidden_dim": 16,
       "max_len": 32,
       "num_layers": 2,

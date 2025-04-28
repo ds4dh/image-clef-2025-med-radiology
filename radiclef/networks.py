@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from collections import namedtuple
-from typing import Tuple
+from typing import Tuple, List
 
 from math import log2, comb, gcd, prod
 
@@ -70,9 +70,11 @@ class ConvEmbedding(nn.Module):
     def __init__(self, init_dict):
         super(ConvEmbedding, self).__init__()
 
-        self.r_list = init_dict["sampling_ratio_list"]
-        self.c_list = init_dict["channels_list"]
-        self.c_o = init_dict["num_out_channels"]
+        self.r_list: List[int] = init_dict["sampling_ratio_list"]
+        self.c_list: List[int] = init_dict["channels_list"]
+        self.c_o: int = init_dict["num_out_channels"]
+        self.f: int = init_dict["proj_filter_size"]
+
 
         self.dropout = init_dict["dropout"]
         self.num_blocks = len(self.r_list)
@@ -88,6 +90,13 @@ class ConvEmbedding(nn.Module):
                 DownConvBlockExternal(self.c_list[i_b], self.c_list[-1], prod(self.r_list[i_b:])))
 
         self.conv_channel = nn.Conv2d(self.c_list[-1] * (self.num_blocks + 1), self.c_o, kernel_size=1)
+        self.proj = nn.Conv2d(self.c_o, self.c_o, kernel_size=self.f, stride=self.f // 4, padding=(self.f - 1) // 2)
+
+        self._freeze_layers()
+
+    def _freeze_layers(self):
+        for param in self.proj.parameters():
+            param.requires_grad = False
 
     def forward(self, inp):
 
@@ -101,6 +110,7 @@ class ConvEmbedding(nn.Module):
 
         res = torch.cat((res, inp), 1)
         out = self.conv_channel(res)
+        out = self.proj(out)
 
         return out
 
@@ -109,7 +119,6 @@ class TransformerSeqGen(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        input_dim = config["input_dim"]
         hidden_dim = config["hidden_dim"]
         vocab_size = config["vocab_size"]
         max_len = config["max_len"]
@@ -120,8 +129,6 @@ class TransformerSeqGen(nn.Module):
 
         self.token_embedding = nn.Embedding(vocab_size, hidden_dim)
         self.pos_embedding = nn.Embedding(max_len, hidden_dim)
-
-        self.vector_proj = nn.Linear(input_dim, hidden_dim)
 
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=hidden_dim,
@@ -134,9 +141,9 @@ class TransformerSeqGen(nn.Module):
 
         self.output_proj = nn.Linear(hidden_dim, vocab_size)
 
-    def forward(self, input_vector, target_ids):
+    def forward(self, input_embedding_seq, target_ids):
         """
-        vector: (b, input_dim)
+        embedding seq: (b, c, input_dim)
         target_ids: (b, l) - token indices
         """
         b, l = target_ids.size()
@@ -146,20 +153,18 @@ class TransformerSeqGen(nn.Module):
         pos_emb = self.pos_embedding(pos_ids)
         tgt = token_emb + pos_emb  # (b, l, d_model)
 
-        memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
-
         tgt_mask = torch.triu(torch.ones(l, l, device=target_ids.device), diagonal=1).bool()
 
-        output = self.decoder(tgt=tgt, memory=memory, tgt_mask=tgt_mask)
+        output = self.decoder(tgt=tgt, memory=input_embedding_seq, tgt_mask=tgt_mask)
 
         logits = self.output_proj(output)
         return logits
 
     @torch.no_grad()
-    def generate_greedy(self, input_vector, bos_token_idx, eos_token_idx, max_len=20):
+    def generate_greedy(self, input_embed_seq, bos_token_idx, eos_token_idx, max_len=20):
 
-        device = input_vector.device
-        b = input_vector.size(0)
+        device = input_embed_seq.device
+        b = input_embed_seq.size(0)
 
         input_ids = torch.full((b, 1), bos_token_idx, dtype=torch.long, device=device)
 
@@ -170,10 +175,9 @@ class TransformerSeqGen(nn.Module):
             pos_ids = torch.arange(l, device=device).unsqueeze(0).expand(b, l)
             tgt = tgt + self.pos_embedding(pos_ids)
 
-            memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
             tgt_mask = torch.triu(torch.ones(l, l, device=device), diagonal=1).bool()
 
-            output = self.decoder(tgt=tgt, memory=memory, tgt_mask=tgt_mask)
+            output = self.decoder(tgt=tgt, memory=input_embed_seq, tgt_mask=tgt_mask)
             logits = self.output_proj(output)  # (b, l, vocab_size)
 
             next_token_logits = logits[:, -1, :]  # (b, vocab_size)
@@ -187,11 +191,10 @@ class TransformerSeqGen(nn.Module):
         return input_ids
 
     @torch.no_grad()
-    def generate_beam_search(self, input_vector, bos_token_idx, eos_token_idx, max_len=20, beam_width=3):
+    def generate_beam_search(self, input_embed_seq, bos_token_idx, eos_token_idx, max_len=20, beam_width=3):
 
-        device = input_vector.device
-        b = input_vector.size(0)
-        memory = self.vector_proj(input_vector).unsqueeze(1)  # (b, 1, d_model)
+        device = input_embed_seq.device
+        b = input_embed_seq.size(0)
 
         # Initialize beams: List of lists of (seq, score) tuples per batch item
         beams = [[(torch.full((1, 1), bos_token_idx, dtype=torch.long, device=device), 0.0)] for _ in range(b)]
@@ -215,10 +218,10 @@ class TransformerSeqGen(nn.Module):
                     tgt = tgt + self.pos_embedding(pos_ids)
 
                     tgt_mask = torch.triu(torch.ones(l, l, device=device), diagonal=1).bool()
-                    mem = memory[i: i + 1]  # (1, 1, d_model)
 
-                    out = self.decoder(tgt=tgt, memory=mem, tgt_mask=tgt_mask)
+                    out = self.decoder(tgt=tgt, memory=input_embed_seq[i: i + 1], tgt_mask=tgt_mask)
                     logits = self.output_proj(out)
+                    # logits[:, :, eos_token_idx] *= 0.8  # Just a tweak
                     log_probs = F.log_softmax(logits[:, -1, :], dim=-1)
 
                     topk_log_probs, topk_tokens = torch.topk(log_probs, beam_width)
@@ -262,19 +265,19 @@ class ConvEmbeddingToSec(torch.nn.Module):
         self.seq_generator = TransformerSeqGen(config["sequence_generator"])
 
     def forward(self, image, seq):
-        b, _, _, _ = image.shape
-
         emb = (self.conv_embedding(image))
-        emb = emb.reshape(b, -1)
+        b, l_emb, _, _ = emb.shape
+        emb = emb.reshape(b, l_emb, -1)
+
         seq = self.seq_generator(emb, seq)
 
         return seq
 
     @torch.no_grad()
     def predict(self, image, bos_token_idx, eos_token_idx, max_len=50, beam_search_width: None | int = None):
-        b, _, _, _ = image.shape
         emb = (self.conv_embedding(image))
-        emb = emb.reshape(b, -1)
+        b, l_emb, _, _ = emb.shape
+        emb = emb.reshape(b, l_emb, -1)
 
         if beam_search_width is None:
             seq = self.seq_generator.generate(emb,
