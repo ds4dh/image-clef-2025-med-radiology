@@ -17,7 +17,7 @@ import os
 import json
 
 DATABASE_NAME = "CLEF"
-RUN_TAG = "2025-04-13_10-18-45_unige-poc"
+RUN_TAG = "2025-04-27_00-08-23_unige-poc"
 DEVICE_NAME = "mps"
 BATCH_SIZE = 100
 BEAM_SEARCH_WIDTH: None | int = 3
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         df = eval_dataset(ds)
         df.insert(0, 'image-ID', pd.Series(image_ids))
         if "f1-score" in df.columns:
-            df_path = os.path.join(run_dir, "{}-inference-{}_f1-score-{}.csv".format(
+            df_path = os.path.join(run_dir, "{}-inference-{}_f1-score-{:.4f}.csv".format(
                 DATABASE_NAME, split, df["f1-score"].mean().item()))
         else:
             df_path = os.path.join(run_dir, "{}-raw-inference-{}.csv".format(
