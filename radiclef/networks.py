@@ -221,6 +221,7 @@ class TransformerSeqGen(nn.Module):
 
                     out = self.decoder(tgt=tgt, memory=input_embed_seq[i: i + 1], tgt_mask=tgt_mask)
                     logits = self.output_proj(out)
+                    # logits[:, :, eos_token_idx] *= 0.8  # Just a tweak
                     log_probs = F.log_softmax(logits[:, -1, :], dim=-1)
 
                     topk_log_probs, topk_tokens = torch.topk(log_probs, beam_width)
