@@ -141,9 +141,22 @@ class TransformerSeqGen(nn.Module):
 
         self.output_proj = nn.Linear(hidden_dim, vocab_size)
 
+        self._freeze_layers()
+
+    def _freeze_layers(self):
+        for layer in self.decoder.layers:
+            for param in layer.linear1.parameters():
+                if param.data.dim() == 2:  # Only the linear matrix weights and not the bias.
+                    param.requires_grad = False
+
+            for param in layer.linear2.parameters():
+                if param.data.dim() == 2:  # Only the linear matrix weights and not the bias.
+                    param.requires_grad = False
+
+
     def forward(self, input_embedding_seq, target_ids):
         """
-        embedding seq: (b, c, input_dim)
+        embedding seq: (b, c, input_dim
         target_ids: (b, l) - token indices
         """
         b, l = target_ids.size()
