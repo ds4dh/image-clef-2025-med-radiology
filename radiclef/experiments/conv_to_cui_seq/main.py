@@ -126,10 +126,11 @@ class TrainingSession(TrainingBaseSession):
             embeddings: torch.Tensor = embedding_dict["data"]
             random_projection_matrix = torch.randn(embeddings.shape[1],
                                                    config_network["sequence_generator"]["hidden_dim"])
+            random_projection_matrix /= torch.sqrt(torch.tensor(random_projection_matrix.shape[1], dtype=torch.float32))
 
-            embeddings = embeddings - embeddings.mean()
             embeddings = embeddings @ random_projection_matrix
-            embeddings = embeddings / embeddings.std(dim=1).reshape(-1, 1).expand_as(embeddings)
+            embeddings /= embeddings.std(dim=1).reshape(-1, 1).expand_as(embeddings)
+            embeddings -= embeddings.mean()
 
             network.seq_generator.token_embedding.weight.data[4:, :] = embeddings
 
