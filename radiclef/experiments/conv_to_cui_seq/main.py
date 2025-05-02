@@ -155,14 +155,26 @@ class TrainingSession(TrainingBaseSession):
         return {"target_seq": target_seq, "output": output, "prediction_seq": output.argmax(dim=-1)}
 
     def loss_function(self, *, output: torch.Tensor, target_seq: torch.Tensor) -> torch.Tensor:
-        token_weights = torch.ones(len(self.cui_object.alphabet))
+        token_weights = torch.ones(len(self.cui_object.alphabet)).to(self.device)
         if self.config_session.loss_function_params is not None:
             eos_token_weight = self.config_session.loss_function_params.get("eos_token_weight")
             eos_index = self.cui_object.c2i[self.cui_object.EOS_TOKEN]
             token_weights[eos_index] = eos_token_weight
+            focal_gamma = self.config_session.loss_function_params.get("focal_loss_gamma")
+            if focal_gamma:
+                log_probs = torch.nn.functional.log_softmax(output, dim=-1)  # (batch, seq_len, vocab)
+                probs = torch.exp(log_probs)
+
+                target_one_hot = torch.nn.functional.one_hot(target_seq, num_classes=output.size(-1)).float()
+                pt = (probs * target_one_hot).sum(-1)  # (batch, seq_len)
+                log_pt = (log_probs * target_one_hot).sum(-1)
+
+                loss = -token_weights[target_seq] * (1 - pt) ** focal_gamma * log_pt
+
+                return loss.mean()
 
         criterion = torch.nn.CrossEntropyLoss(ignore_index=self.cui_object.c2i[self.cui_object.PAD_TOKEN],
-                                              weight=token_weights.to(self.device))
+                                              weight=token_weights)
 
         loss = criterion(output.transpose(-2, -1), target_seq)
 
