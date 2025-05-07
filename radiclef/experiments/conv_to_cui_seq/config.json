@@ -10,7 +10,8 @@
     "loss_function_params": {
       "eos_token_weight": 1,
       "focal_loss_gamma": 0,
-      "label_smoothing": 0.2
+      "label_smoothing": 0.2,
+      "use_cui_frequency_prior": true
     }
   },
   "data": {

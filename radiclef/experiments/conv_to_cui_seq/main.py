@@ -19,9 +19,10 @@ import json
 EXP_DIR = os.path.join(os.path.dirname(__file__))
 
 CUI_ALPHABET_PATH = os.path.join(RESOURCES_DIR, "cui-alphabet.txt")
+DATASET_DICT = load_from_disk(CLEF_2025_DATABASE_PATH)
 if not os.path.exists(CUI_ALPHABET_PATH):
 
-    dataset = load_from_disk(CLEF_2025_DATABASE_PATH)["train"]
+    dataset = DATASET_DICT["train"]
     dataset = dataset.remove_columns([col for col in dataset.features if col != "cui_codes"])
     cui_obj = ConceptUniqueIdentifiers()
 
@@ -48,6 +49,7 @@ CUI_OBJ = ConceptUniqueIdentifiers(alphabet=CUI_ALPHABET)
 class TrainingSession(TrainingBaseSession):
     def __init__(self, config: Dict,
                  cui_object: ConceptUniqueIdentifiers,
+                 alphabet_frequency: Dict[int, float] | None = None,
                  runs_parent_dir: str | None = None,
                  create_run_dir_afresh: bool = True,
                  source_run_dir_tag: str | None = None,
@@ -61,13 +63,33 @@ class TrainingSession(TrainingBaseSession):
                          tag_postfix=tag_postfix
                          )
 
+        token_weights = torch.ones(len(self.cui_object.alphabet))
+        if self.config_session.loss_function_params is not None:
+            if self.config_session.loss_function_params.get("use_cui_frequency_prior"):
+                if alphabet_frequency is None:
+                    raise ValueError(
+                        "The config is expecting to use cui-frequency as prior, while the session instance does not provide it.")
+                token_weights = self.get_cui_loss_weights_from_frequency_prior(alphabet_frequency)
+
+            eos_token_weight = self.config_session.loss_function_params.get("eos_token_weight")
+            eos_index = self.cui_object.c2i[self.cui_object.EOS_TOKEN]
+            token_weights[eos_index] = eos_token_weight
+
+        self.token_weights = token_weights.to(self.device)
+
+    @staticmethod
+    def get_cui_loss_weights_from_frequency_prior(alphabet_frequency: Dict[int, float]) -> torch.Tensor:
+        token_weights = torch.tensor([freq if idx >= 4 else 1.0 for idx, freq in alphabet_frequency.items()])
+        token_weights = torch.clip((1 / token_weights), 0.1, 20)
+
+        return token_weights
+
     def init_datasets(self) -> Tuple[Dataset, ValidationDatasetsDict]:
         return self.init_datasets_functional(self.config_data)
 
     @staticmethod
     def init_datasets_functional(config_data: Dict) -> Tuple[Dataset, ValidationDatasetsDict]:
 
-        dataset_dict = load_from_disk(CLEF_2025_DATABASE_PATH)
         image_height, image_width = config_data["image_size"]
         image_prep = ImagePrepare(standard_image_size=(image_height, image_width),
                                   standard_image_mode=config_data["image_mode"],
@@ -101,11 +123,11 @@ class TrainingSession(TrainingBaseSession):
                 "cui_seq": cui_seq
             }
 
-        dataset_train = dataset_dict["train"]
+        dataset_train = DATASET_DICT["train"]
         dataset_train.set_transform(
             lambda x: map_fields(x, do_transforms=do_image_augment_transforms))
 
-        dataset_valid = dataset_dict["valid"]
+        dataset_valid = DATASET_DICT["valid"]
         dataset_valid.set_transform(lambda x: map_fields(x, do_transforms=False))
 
         return dataset_train, ValidationDatasetsDict(
@@ -155,11 +177,8 @@ class TrainingSession(TrainingBaseSession):
         return {"target_seq": target_seq, "output": output, "prediction_seq": output.argmax(dim=-1)}
 
     def loss_function(self, *, output: torch.Tensor, target_seq: torch.Tensor) -> torch.Tensor:
-        token_weights = torch.ones(len(self.cui_object.alphabet)).to(self.device)
+        label_smoothing: float = 0.0
         if self.config_session.loss_function_params is not None:
-            eos_token_weight = self.config_session.loss_function_params.get("eos_token_weight")
-            eos_index = self.cui_object.c2i[self.cui_object.EOS_TOKEN]
-            token_weights[eos_index] = eos_token_weight
             focal_gamma = self.config_session.loss_function_params.get("focal_loss_gamma")
             if focal_gamma:
                 log_probs = torch.nn.functional.log_softmax(output, dim=-1)  # (batch, seq_len, vocab)
@@ -169,12 +188,15 @@ class TrainingSession(TrainingBaseSession):
                 pt = (probs * target_one_hot).sum(-1)  # (batch, seq_len)
                 log_pt = (log_probs * target_one_hot).sum(-1)
 
-                loss = -token_weights[target_seq] * (1 - pt) ** focal_gamma * log_pt
+                loss = -self.token_weights[target_seq] * (1 - pt) ** focal_gamma * log_pt
 
                 return loss.mean()
+            if self.config_session.loss_function_params.get("label_smoothing") is not None:
+                label_smoothing = self.config_session.loss_function_params.get("label_smoothing")
 
         criterion = torch.nn.CrossEntropyLoss(ignore_index=self.cui_object.c2i[self.cui_object.PAD_TOKEN],
-                                              weight=token_weights)
+                                              weight=self.token_weights,
+                                              label_smoothing=label_smoothing)
 
         loss = criterion(output.transpose(-2, -1), target_seq)
 
@@ -241,12 +263,19 @@ class F1Metric(BaseMetricsClass):
 
 if __name__ == "__main__":
     vocab_size = len(CUI_ALPHABET)
+    alphabet_freq: Dict[int, float] = {i: 0.0 for i in range(len(CUI_ALPHABET))}
+    for cui_list in DATASET_DICT["train"]["cui_codes"]:
+        for cui in cui_list:
+            alphabet_freq[CUI_OBJ.c2i[cui]] += 1
+    _cui_freq_sum = sum([_freq for _freq in alphabet_freq.values()])
+    alphabet_freq = {_idx: _freq * vocab_size / _cui_freq_sum for _idx, _freq in alphabet_freq.items()}
+
     with open(os.path.join(os.getcwd(), "config.json"), "r") as f:
         config_dict = json.load(f)
 
     config_dict["network"]["sequence_generator"]["vocab_size"] = vocab_size
 
-    session = TrainingSession(config_dict, CUI_OBJ)
+    session = TrainingSession(config=config_dict, cui_object=CUI_OBJ, alphabet_frequency=alphabet_freq)
     layout_dict = {
         'Loss': {
             'Loss (train vs val)': ['Multiline', ['training/loss/epochs',
