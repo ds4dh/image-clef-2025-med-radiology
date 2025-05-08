@@ -87,8 +87,8 @@ class InitNetworkUnitTest(unittest.TestCase):
         dataset, _ = TrainingSession.init_datasets_functional(
             {
                 "image_size": [
-                    1024,
-                    1024
+                    512,
+                    512
                 ],
                 "image_positional_embedding": True,
                 "image_mode": "RGB",
@@ -105,27 +105,27 @@ class InitNetworkUnitTest(unittest.TestCase):
                     2,
                     2,
                     2,
-                    2,
                     4
                 ],
                 "channels_list": [
-                    3,
+                    5,
                     8,
-                    16,
                     16,
                     16,
                     16
                 ],
-                "num_out_channels": 1,
+                "num_out_channels": 4,
+                "proj_filter_size": 16,
                 "dropout": 0.1
             },
             "sequence_generator": {
-                "input_dim": 256,
-                "hidden_dim": 64,
+                "hidden_dim": 16,
                 "vocab_size": vocab_size,
-                "max_len": 8,
-                "num_layers": 4,
-                "num_heads": 2
+                "max_len": 32,
+                "num_layers": 2,
+                "dim_feedforward": 16,
+                "num_heads": 1,
+                "dropout": 0.1
 
             }
         }
