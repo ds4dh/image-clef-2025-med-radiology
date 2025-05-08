@@ -80,7 +80,7 @@ class TrainingSession(TrainingBaseSession):
     @staticmethod
     def get_cui_loss_weights_from_frequency_prior(alphabet_frequency: Dict[int, float]) -> torch.Tensor:
         token_weights = torch.tensor([freq if idx >= 4 else 1.0 for idx, freq in alphabet_frequency.items()])
-        token_weights = torch.clip((1 / token_weights), 0.1, 20)
+        token_weights = torch.clip((1 / token_weights), 0.25, 5)
 
         return token_weights
 
