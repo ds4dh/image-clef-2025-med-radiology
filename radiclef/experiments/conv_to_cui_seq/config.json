@@ -8,7 +8,10 @@
     "dataloader_num_workers": 8,
     "tag_postfix": null,
     "loss_function_params": {
-      "eos_token_weight": 0.25
+      "eos_token_weight": 1,
+      "focal_loss_gamma": 0,
+      "label_smoothing": 0.0,
+      "use_cui_frequency_prior": false
     }
   },
   "data": {
