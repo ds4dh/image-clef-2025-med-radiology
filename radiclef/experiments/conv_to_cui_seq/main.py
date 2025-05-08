@@ -55,6 +55,8 @@ class TrainingSession(TrainingBaseSession):
                  source_run_dir_tag: str | None = None,
                  tag_postfix: str | None = None):
 
+        if config["data"].get("cui_minimal_sequence_length") is not None:
+            cui_object.set_minimal_sequence_length_value(config["data"]["cui_minimal_sequence_length"])
         self.cui_object = cui_object
         super().__init__(config,
                          runs_parent_dir=runs_parent_dir,
