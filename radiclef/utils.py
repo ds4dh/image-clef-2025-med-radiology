@@ -88,10 +88,10 @@ class ConceptUniqueIdentifiers:
         return seq
 
     def decode_preprocess(self, seq: List[int]) -> List[int]:
-        seq = [idx for idx in seq if idx != self.c2i[self.PAD_TOKEN]]
-
         if seq[0] == self.c2i[self.BOS_TOKEN]:
             seq = seq[1:]
+
+        seq = [idx for idx in seq if idx != self.c2i[self.PAD_TOKEN]]
 
         if self.c2i[self.EOS_TOKEN] in seq:
             eos_seq_index = seq.index(self.c2i[self.EOS_TOKEN])
