@@ -17,7 +17,10 @@ class ConceptUniqueIdentifiers:
     BOS_TOKEN = "<BOS>"
     EOS_TOKEN = "<EOS>"
 
-    def __init__(self, alphabet: List[str] | None = None, concept_map: Dict[str, str] | None = None):
+    def __init__(self, alphabet: List[str] | None = None,
+                 concept_map: Dict[str, str] | None = None,
+                 minimal_sequence_length: int = 1):
+
         # TODO: Add tests for concept_map
         if concept_map is not None:
             if not isinstance(concept_map, dict):
@@ -41,6 +44,9 @@ class ConceptUniqueIdentifiers:
             for vocab in self.alphabet:
                 if vocab not in concept_map.keys():
                     raise RuntimeError("{} not existing in the provided concept mapping.".format(vocab))
+
+        self.minimal_sequence_length: int = 1
+        self.set_minimal_sequence_length_value(minimal_sequence_length)
 
     def _check_and_get_alphabet(self, alphabet: List[str]) -> List[str]:
         if not isinstance(alphabet, list) or not all(isinstance(element, str) for element in alphabet):
@@ -75,6 +81,8 @@ class ConceptUniqueIdentifiers:
     def encode_as_seq(self, items: List[str]) -> List[int]:
         seq = [self.c2i[self.BOS_TOKEN]]
         seq += [self.c2i.get(c, self.c2i[self.OOV_TOKEN]) for c in items]
+        # To mask too short sequences with the padding sequence, before the EOS is assigned:
+        seq += [self.c2i.get(self.PAD_TOKEN)] * (self.minimal_sequence_length - len(items))
         seq += [self.c2i[self.EOS_TOKEN]]
 
         return seq
@@ -82,6 +90,8 @@ class ConceptUniqueIdentifiers:
     def decode_preprocess(self, seq: List[int]) -> List[int]:
         if seq[0] == self.c2i[self.BOS_TOKEN]:
             seq = seq[1:]
+
+        seq = [idx for idx in seq if idx != self.c2i[self.PAD_TOKEN]]
 
         if self.c2i[self.EOS_TOKEN] in seq:
             eos_seq_index = seq.index(self.c2i[self.EOS_TOKEN])
@@ -103,6 +113,14 @@ class ConceptUniqueIdentifiers:
         seq_mapped = [self.concept_map[code] for code in seq_decoded]
 
         return seq_mapped
+
+    def set_minimal_sequence_length_value(self, minimal_sequence_length: int):
+        if not isinstance(minimal_sequence_length, int) or minimal_sequence_length < 1:
+            raise ValueError(
+                "The minimal sequence length, below which the EOS token will be delayed and replaced with PAD tokens "
+                "should be a positive integer.")
+
+        self.minimal_sequence_length = minimal_sequence_length
 
 
 class ImagePrepare:
