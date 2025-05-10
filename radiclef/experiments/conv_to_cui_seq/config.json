@@ -15,7 +15,7 @@
     }
   },
   "data": {
-    "cui_minimal_sequence_length": 5,
+    "cui_minimal_sequence_length": 3,
     "image_size": [
       512,
       512
