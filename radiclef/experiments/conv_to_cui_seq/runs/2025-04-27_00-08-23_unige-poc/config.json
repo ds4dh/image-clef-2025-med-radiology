@@ -1,0 +1,92 @@
+{
+  "session": {
+    "device_name": "cuda:1",
+    "num_epochs": 500,
+    "mini_batch_size": 64,
+    "learning_rate": 0.003,
+    "weight_decay": 1e-05,
+    "dataloader_num_workers": 8,
+    "loss_function_params": {
+      "eos_token_weight": 1
+    }
+  },
+  "data": {
+    "image_size": [
+      512,
+      512
+    ],
+    "image_positional_embedding": true,
+    "image_mode": "RGB",
+    "image_augment_transforms": {
+      "do_transforms": true,
+      "random_linear_illumination": {
+        "p": 0.3,
+        "gain": 0.1
+      },
+      "random_adjust_sharpness": {
+        "p": 0.1,
+        "sharpness_factor": 2
+      },
+      "jitter": {
+        "p": 0.1,
+        "brightness": 0.1,
+        "saturation": 0.0,
+        "contrast": 0.1
+      },
+      "random_resized_crop": {
+        "p": 0.1,
+        "ratio": [
+          0.8,
+          1.2
+        ],
+        "scale": [
+          0.25,
+          1.5
+        ]
+      },
+      "random_rotation": {
+        "p": 0.4,
+        "degrees": [
+          -45,
+          45
+        ]
+      }
+    }
+  },
+  "metrics": {
+    "F1Metric": [
+      "f1_score"
+    ]
+  },
+  "network": {
+    "architecture": "ConvEmbeddingToSec",
+    "convolutional_embedding": {
+      "sampling_ratio_list": [
+        2,
+        2,
+        2,
+        4
+      ],
+      "channels_list": [
+        5,
+        8,
+        16,
+        16,
+        16
+      ],
+      "num_out_channels": 4,
+      "proj_filter_size": 16,
+      "dropout": 0.1
+    },
+    "sequence_generator": {
+      "use-pretrained-cui-embedding": false,
+      "hidden_dim": 16,
+      "max_len": 32,
+      "num_layers": 2,
+      "num_heads": 1,
+      "dim_feedforward": 16,
+      "dropout": 0.1,
+      "vocab_size": 2483
+    }
+  }
+}
