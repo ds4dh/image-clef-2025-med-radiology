@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: radiclef
+Version: 0.1.0
+Summary: Radiology report generation
+Requires-Python: <=3.12.3,>=3.10
+License-File: LICENSE
+Requires-Dist: torch
+Requires-Dist: torchbase
+Requires-Dist: numpy
+Requires-Dist: pillow
+Requires-Dist: scikit-learn
+Requires-Dist: tensorboard
+Requires-Dist: torchinfo
+Requires-Dist: kornia
+Dynamic: license-file

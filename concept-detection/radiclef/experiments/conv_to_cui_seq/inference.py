@@ -29,7 +29,7 @@ elif DATABASE_NAME == "CLEF":
 else:
     raise NotImplementedError
 
-run_dir = os.path.join("./runs", RUN_TAG)
+run_dir = os.path.join("runs", RUN_TAG)
 
 with open(os.path.join(run_dir, "config.json"), "r") as f:
     config = json.load(f)

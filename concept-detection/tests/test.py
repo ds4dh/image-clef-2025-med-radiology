@@ -1,6 +1,5 @@
-from datasets import load_dataset, Dataset
+from datasets import Dataset
 from radiclef import CORPORA_DIR, RESOURCES_DIR
-import itertools
 
 # dataset_iter = load_dataset("eltorio/ROCOv2-radiology", split="train", streaming=True, cache_dir=RESOURCES_DIR)
 # small_subset = dataset_iter.take(100)

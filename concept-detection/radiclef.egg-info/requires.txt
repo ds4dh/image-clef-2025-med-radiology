@@ -1,0 +1,8 @@
+torch
+torchbase
+numpy
+pillow
+scikit-learn
+tensorboard
+torchinfo
+kornia

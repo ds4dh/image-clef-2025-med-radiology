@@ -7,8 +7,6 @@ import unittest
 
 import torch
 
-import os
-
 
 class InitDatasetsUnitTest(unittest.TestCase):
     def setUp(self):
