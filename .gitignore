@@ -9,5 +9,5 @@ __pycache__
 /runs/
 /build/
 /concept-detection/resources/
-/radiclef.egg-info/
+concept-detection/radiclef.egg-info/
 /concept-detection/radiclef/experiments/conv_to_cui_seq/runs/
